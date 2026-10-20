@@ -1,0 +1,31 @@
+import type { Snapshot } from "../model.ts";
+
+const BASE = "/api/plugins/k8s";
+
+async function call<T>(path: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, init);
+  if (!res.ok) throw new Error(`${path}: HTTP ${res.status}`);
+  return res.json() as Promise<T>;
+}
+
+export const getState = () => call<Snapshot>("/state");
+export const refreshState = () => call<Snapshot>("/refresh", { method: "POST" });
+export const listContexts = () => call<{ contexts: string[]; error?: string }>("/contexts");
+
+// a per-viewer convenience: storage can be missing or throw (private mode, cleared data)
+export function loadPref<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(`trame-k8s:${key}`);
+    return raw === null ? fallback : (JSON.parse(raw) as T);
+  } catch {
+    return fallback;
+  }
+}
+
+export function savePref(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(`trame-k8s:${key}`, JSON.stringify(value));
+  } catch {
+    // preferences are best-effort
+  }
+}
