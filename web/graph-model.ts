@@ -1,5 +1,5 @@
 // Snapshot → force-graph nodes and links for each graph view. Pure; Graph.tsx only draws.
-import { type ClusterView, type Health, health, type Workload } from "../model.ts";
+import { type ClusterView, type Health, health, isControlPlane, rolesOf, type Workload } from "../model.ts";
 
 export type Ref =
   | { type: "cluster"; context: string }
@@ -62,6 +62,7 @@ const GROUP_COLOR = "var(--color-chart-5)";
 const DRIFT = "var(--color-paused)";
 const HOT = "var(--color-copper)";
 const BUSY_NODE = 0.85;
+const CONTROL = "var(--color-chart-7)";
 
 export const workloadId = (w: Pick<Workload, "cluster" | "ns" | "name">) => `w:${w.cluster}/${w.ns}/${w.name}`;
 export const appKey = (w: Pick<Workload, "ns" | "name">) => `${w.ns}/${w.name}`;
@@ -133,6 +134,9 @@ function workloadNode(w: Workload, now: number, id = workloadId(w)): GNode {
   };
 }
 
+// a group spanning several namespaces keeps each namespace with 2+ of its workloads as a hub of its own
+const NS_HUB_MIN = 2;
+
 // cluster → group or namespace → workload; a workload drifts out from its hub as its last rollout ages
 function infra(clusters: ClusterView[], ws: Workload[], now: number): GraphData {
   const nodes: GNode[] = [], links: GLink[] = [];
@@ -149,10 +153,25 @@ function infra(clusters: ClusterView[], ws: Workload[], now: number): GraphData 
         ref: sec.group ? { type: "group", context: c.context, group: sec.label } : { type: "ns", context: c.context, ns: sec.label },
       });
       links.push({ source: `c:${c.context}`, target: id, dist: 45, width: 1.3 });
+      const perNs = new Map<string, number>();
+      for (const w of inNs) perNs.set(w.ns, (perNs.get(w.ns) ?? 0) + 1);
+      const split = sec.group && perNs.size > 1;
       for (const w of inNs) {
         nodes.push(workloadNode(w, now));
+        let hub = id;
+        if (split && perNs.get(w.ns)! >= NS_HUB_MIN) {
+          hub = `${id}/${w.ns}`;
+          if (!nodes.some((n) => n.id === hub)) {
+            nodes.push({
+              id: hub, kind: "ns", label: w.ns, r: 6, color: NS_COLOR, labelAlways: true, charge: -150,
+              tip: [w.ns, `namespace · ${c.context} · ${perNs.get(w.ns)} workloads in ${sec.label}`],
+              ref: { type: "ns", context: c.context, ns: w.ns },
+            });
+            links.push({ source: id, target: hub, dist: 32, width: 1.1 });
+          }
+        }
         const hours = w.rolledAt ? Math.max(0, (now - Date.parse(w.rolledAt)) / 3_600_000) : 24 * 30;
-        links.push({ source: id, target: workloadId(w), dist: 16 + 8 * Math.log2(1 + hours) });
+        links.push({ source: hub, target: workloadId(w), dist: 16 + 8 * Math.log2(1 + hours) });
       }
     }
   }
@@ -243,11 +262,19 @@ function capacity(clusters: ClusterView[], ws: Workload[]): GraphData {
       const mem = n.mem.alloc ? n.mem.req / n.mem.alloc : 0;
       const busy = Math.max(cpu, mem) > BUSY_NODE;
       const id = `node:${c.context}/${n.name}`;
+      const control = isControlPlane(n);
       nodes.push({
-        id, kind: "node", label: `${n.name} · ${Math.round(cpu * 100)}%`, r: 8,
-        color: !n.ready ? "var(--color-blocked)" : busy ? HOT : "var(--color-chipline)",
+        id, kind: "node", label: `${control ? "⚙ " : ""}${n.name} · ${Math.round(cpu * 100)}%`, r: 8,
+        color: !n.ready ? "var(--color-blocked)" : busy ? HOT : control ? CONTROL : "var(--color-chipline)",
+        // control-plane nodes are a ring around a translucent fill, workers a solid dot
+        ringColor: control ? (!n.ready ? "var(--color-blocked)" : busy ? HOT : CONTROL) : undefined,
         labelAlways: true, charge: -160,
-        tip: [n.name, `cpu requests ${Math.round(cpu * 100)}% · memory ${Math.round(mem * 100)}%`, ...(n.ready ? [] : ["NotReady"])],
+        tip: [
+          n.name,
+          rolesOf(n).join(", ") || "worker",
+          `cpu requests ${Math.round(cpu * 100)}% · memory ${Math.round(mem * 100)}%`,
+          ...(n.ready ? [] : ["NotReady"]),
+        ],
         ref: { type: "node", context: c.context, node: n.name },
       });
       links.push({ source: `c:${c.context}`, target: id, dist: 55, width: 1.3 });

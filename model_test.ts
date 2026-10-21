@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { type Health, health, type Workload } from "./model.ts";
-import { driftOf } from "./web/graph-model.ts";
+import { buildGraph, driftOf } from "./web/graph-model.ts";
 
 const NOW = Date.parse("2026-10-20T12:00:00Z");
 const w = (over: Partial<Workload>): Workload => ({
@@ -27,4 +27,18 @@ test("drift is measured against the latest rollout of the app", () => {
   const staging = w({ cluster: "stg", images: ["reg/api:v2"], rolledAt: "2026-10-19T09:00:00Z" });
   const drift = driftOf([prod, dev, staging]);
   expect([drift.get(dev), drift.get(prod), drift.get(staging)]).toEqual([false, true, false]);
+});
+
+test("infra: a group over several namespaces keeps a namespace with 2+ workloads as its own hub", () => {
+  const ws = [
+    w({ ns: "langfuse", name: "web", group: "ai" }),
+    w({ ns: "langfuse", name: "worker", group: "ai" }),
+    w({ ns: "litellm", name: "litellm", group: "ai" }),
+    w({ ns: "app", name: "api" }),
+  ];
+  const cluster = { context: "dev", provider: null, error: null, polledAt: null, workloads: ws, nodes: [], logo: null };
+  const g = buildGraph("infra", [cluster], ws, NOW);
+  const parent = (name: string) => g.links.find((l) => l.target === `w:dev/${ws.find((x) => x.name === name)!.ns}/${name}`)!.source;
+  expect([parent("web"), parent("worker"), parent("litellm"), parent("api")]).toEqual(["g:dev/ai/langfuse", "g:dev/ai/langfuse", "g:dev/ai", "n:dev/app"]);
+  expect(g.links.find((l) => l.target === "g:dev/ai/langfuse")?.source).toBe("g:dev/ai");
 });

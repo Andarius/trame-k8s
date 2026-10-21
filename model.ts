@@ -2,6 +2,8 @@
 
 export type WorkloadKind = "Deployment" | "StatefulSet" | "DaemonSet" | "CronJob";
 
+export type Usage = { req: number; use: number | null }; // use is null without metrics-server
+
 export type PodView = {
   name: string;
   node: string | null; // null while unscheduled
@@ -9,6 +11,8 @@ export type PodView = {
   ready: boolean;
   restarts: number;
   reason: string | null;
+  cpu: Usage; // millicores
+  mem: Usage; // bytes
 };
 
 export type ServiceView = { name: string; type: string; ports: string[] };
@@ -37,9 +41,10 @@ export type Workload = {
 
 export type NodeView = {
   name: string;
+  roles: string[]; // `node-role.kubernetes.io/<role>` labels, sorted
   ready: boolean;
-  cpu: { alloc: number; req: number }; // millicores
-  mem: { alloc: number; req: number }; // bytes
+  cpu: { alloc: number; req: number; use: number | null }; // millicores
+  mem: { alloc: number; req: number; use: number | null }; // bytes
 };
 
 export type ClusterView = {
@@ -141,5 +146,20 @@ export function imageIcon(images: string[]): string | null {
 }
 
 export const providerIcon = (provider: string | null) => (provider && PROVIDER_ICONS[provider]) ?? null;
+
+// a host older than this field sends no roles
+export const rolesOf = (n: Partial<Pick<NodeView, "roles">>) => n.roles ?? [];
+export const isControlPlane = (n: Partial<Pick<NodeView, "roles">>) => rolesOf(n).some((r) => r === "control-plane" || r === "master");
+
+const globRe = (pattern: string) =>
+  new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", "[^/]*")}$`);
+
+// a settings key or pattern (`name`, `ns/name`, `context/ns/name`, `*` within a segment) against the workload's key
+// with as many segments
+export function matchesKey(w: Pick<Workload, "cluster" | "ns" | "name">, pattern: string): boolean {
+  const keys = [w.name, `${w.ns}/${w.name}`, `${w.cluster}/${w.ns}/${w.name}`];
+  const key = keys[pattern.split("/").length - 1];
+  return key !== undefined && globRe(pattern).test(key);
+}
 
 export const SLUG_RE = /^[a-z0-9]{1,60}$/;

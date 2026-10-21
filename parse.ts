@@ -26,11 +26,14 @@ export type KubeItem = {
   metadata: Meta;
   spec?: Record<string, unknown>;
   status?: Record<string, unknown>;
+  containers?: { name: string; usage?: Record<string, string> }[]; // PodMetrics
 };
+type PodUsage = { cpu: number; mem: number };
 export type KubeList = { items: KubeItem[] };
 
 const LOGO_ANNOTATION = "trame.dev/logo";
 const GROUP_ANNOTATION = "trame.dev/group";
+const ROLE_LABEL = "node-role.kubernetes.io/";
 const WORKLOAD_KINDS = new Set<string>(["Deployment", "StatefulSet", "DaemonSet", "CronJob"]);
 
 const num = (v: unknown, fallback = 0) => (typeof v === "number" ? v : fallback);
@@ -71,10 +74,17 @@ function podReason(pod: KubeItem): string | null {
   return status.phase === "Failed" ? (status.reason as string | undefined) ?? "Failed" : null;
 }
 
-function podView(pod: KubeItem): PodView {
+const requested = (containers: Container[], res: string, milli: boolean) =>
+  containers.reduce((s, c) => s + quantity(c.resources?.requests?.[res], milli), 0);
+
+function podView(pod: KubeItem, usage: Map<string, PodUsage>): PodView {
   const status = pod.status ?? {};
   const statuses = (status.containerStatuses ?? []) as ContainerStatus[];
+  const containers = (pod.spec?.containers ?? []) as Container[];
+  const used = usage.get(key(pod.metadata.namespace ?? "", pod.metadata.name));
   return {
+    cpu: { req: requested(containers, "cpu", true), use: used?.cpu ?? null },
+    mem: { req: requested(containers, "memory", false), use: used?.mem ?? null },
     name: pod.metadata.name,
     node: (pod.spec?.nodeName as string | undefined) ?? null,
     phase: (status.phase as string | undefined) ?? "Unknown",
@@ -131,6 +141,15 @@ export function parseCluster(context: string, list: KubeList, polledAt: string):
   }
 
   const pods = byKind("Pod").filter((p) => p.status?.phase !== "Succeeded");
+  // metrics-server's PodMetrics, when the API is served
+  const usage = new Map<string, PodUsage>();
+  for (const m of byKind("PodMetrics")) {
+    const cs = m.containers ?? [];
+    usage.set(key(m.metadata.namespace ?? "", m.metadata.name), {
+      cpu: cs.reduce((s, c) => s + quantity(c.usage?.cpu, true), 0),
+      mem: cs.reduce((s, c) => s + quantity(c.usage?.memory), 0),
+    });
+  }
   const podsOf = new Map<string, KubeItem[]>();
   for (const pod of pods) {
     const owner = ownerOf(pod, jobOwners);
@@ -150,7 +169,7 @@ export function parseCluster(context: string, list: KubeList, polledAt: string):
     const status = item.status ?? {};
     const tpl = template(item);
     const own = podsOf.get(`${kind}:${key(ns, item.metadata.name)}`) ?? [];
-    const views = own.map(podView);
+    const views = own.map((p) => podView(p, usage));
 
     let desired: number, ready: number, rolledAt: string | null, failed = false;
     if (kind === "DaemonSet") {
@@ -261,15 +280,15 @@ export function parseCluster(context: string, list: KubeList, polledAt: string):
   const nodes: NodeView[] = byKind("Node").map((n) => {
     const alloc = (n.status?.allocatable ?? {}) as Record<string, string>;
     const on = pods.filter((p) => p.spec?.nodeName === n.metadata.name && p.status?.phase !== "Failed");
-    const req = (res: string, milli: boolean) =>
-      on.reduce((sum, p) =>
-        sum + ((p.spec?.containers ?? []) as Container[])
-          .reduce((s, c) => s + quantity(c.resources?.requests?.[res], milli), 0), 0);
+    const req = (res: string, milli: boolean) => on.reduce((sum, p) => sum + requested((p.spec?.containers ?? []) as Container[], res, milli), 0);
+    const use = (res: keyof PodUsage) =>
+      usage.size ? on.reduce((sum, p) => sum + (usage.get(key(p.metadata.namespace ?? "", p.metadata.name))?.[res] ?? 0), 0) : null;
     return {
       name: n.metadata.name,
+      roles: Object.keys(n.metadata.labels ?? {}).filter((k) => k.startsWith(ROLE_LABEL)).map((k) => k.slice(ROLE_LABEL.length)).sort(),
       ready: ((n.status?.conditions ?? []) as Condition[]).some((c) => c.type === "Ready" && c.status === "True"),
-      cpu: { alloc: quantity(alloc.cpu, true), req: req("cpu", true) },
-      mem: { alloc: quantity(alloc.memory), req: req("memory", false) },
+      cpu: { alloc: quantity(alloc.cpu, true), req: req("cpu", true), use: use("cpu") },
+      mem: { alloc: quantity(alloc.memory), req: req("memory", false), use: use("mem") },
     };
   });
   const providerId = byKind("Node").map((n) => n.spec?.providerID as string | undefined).find(Boolean);

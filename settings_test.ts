@@ -34,6 +34,9 @@ const w = (over: Partial<Workload>): Workload => ({
 test.each([
   { id: "most specific override wins", over: {}, logos: { api: "react", "app/api": "fastapi", "dev/app/api": "python" }, want: "/api/plugins/k8s/icon/python" },
   { id: "URL override goes through its key, never the URL itself", over: {}, logos: { api: "https://cdn.test/a.svg" }, want: "/api/plugins/k8s/logo?key=api" },
+  { id: "pattern matches the key with as many segments", over: {}, logos: { "app/a*": "https://cdn.test/a.svg" }, want: "/api/plugins/k8s/logo?key=app%2Fa*" },
+  { id: "pattern in another namespace does not match", over: {}, logos: { "other/*": "react" }, want: null },
+  { id: "exact key wins over an earlier pattern", over: {}, logos: { "a*": "react", api: "fastapi" }, want: "/api/plugins/k8s/icon/fastapi" },
   { id: "annotation slug", over: { logoHint: "fastapi" }, logos: {}, want: "/api/plugins/k8s/icon/fastapi" },
   { id: "annotation URL ignored: the cluster cannot make the host fetch", over: { logoHint: "https://evil.test/x.svg" }, logos: {}, want: null },
   { id: "guessed from the image", over: { images: ["ghcr.io/cloudnative-pg/postgresql:16"] }, logos: {}, want: "/api/plugins/k8s/icon/postgresql" },
