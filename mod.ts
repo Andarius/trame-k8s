@@ -4,6 +4,7 @@ import type { Plugin, PluginSettings } from "@trame/plugin-api";
 import { type ClusterView, SLUG_RE, type Snapshot, unhealthy } from "./model.ts";
 import { fetchCluster, listContexts } from "./kube.ts";
 import { isHttpsUrl, readSettings, sanitizeSettings, withSettings } from "./settings.ts";
+import { REPO, VERSION } from "./version.ts";
 
 const ICON_CDN = "https://cdn.simpleicons.org";
 const MAX_LOGO_BYTES = 512 * 1024;
@@ -80,6 +81,8 @@ const plugin: Plugin = {
   label: "Kubernetes",
   glyph: "⎈",
   description: "Workloads per cluster, from your kubeconfig contexts",
+  version: VERSION,
+  repo: REPO,
   ungatedRoutes: ["/contexts"],
 
   async routes(req, subPath, url) {
