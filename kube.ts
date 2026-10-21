@@ -4,6 +4,7 @@ import { type KubeList, parseCluster } from "./parse.ts";
 
 const KINDS = "deployments,statefulsets,daemonsets,cronjobs,jobs,pods,services,ingresses,nodes";
 const ROUTES = "httproutes.gateway.networking.k8s.io";
+const METRICS = "pods.metrics.k8s.io";
 const TIMEOUT_MS = 30_000;
 
 export class KubectlError extends Error {}
@@ -39,10 +40,11 @@ const get = (kubectl: string, context: string, kinds: string) =>
     .then((out) => JSON.parse(out) as KubeList);
 
 export async function fetchCluster(kubectl: string, context: string): Promise<ClusterView> {
-  // a separate call: a cluster without the Gateway API CRDs fails it, and that must not fail the poll
-  const [core, routes] = await Promise.all([
+  // separate calls: a cluster without the Gateway API CRDs or metrics-server fails them, and that must not fail the poll
+  const [core, routes, metrics] = await Promise.all([
     get(kubectl, context, KINDS),
     get(kubectl, context, ROUTES).catch(() => ({ items: [] })),
+    get(kubectl, context, METRICS).catch(() => ({ items: [] })),
   ]);
-  return parseCluster(context, { items: [...core.items, ...routes.items] }, new Date().toISOString());
+  return parseCluster(context, { items: [...core.items, ...routes.items, ...metrics.items] }, new Date().toISOString());
 }

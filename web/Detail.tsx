@@ -1,7 +1,7 @@
 // The peek panel: whatever a click on a column row or a graph node points at.
 import { type ReactNode, useState } from "react";
 import { openInBrowser } from "@trame/web-api";
-import { type ClusterView, health, type Workload } from "../model.ts";
+import { type ClusterView, health, type PodView, rolesOf, type Usage, type Workload } from "../model.ts";
 import { ago, appKey, driftOf, HEALTH_COLOR, HEALTH_LABEL, type Ref, tagOf } from "./graph-model.ts";
 
 const SHORT_KIND = { Deployment: "deploy", StatefulSet: "sts", DaemonSet: "ds", CronJob: "cronjob" } as const;
@@ -41,6 +41,19 @@ function Copy({ label, text }: { label: string; text: string }) {
     </button>
   );
 }
+
+export const cores = (m: number) => (m >= 1000 ? `${(m / 1000).toFixed(1)}c` : `${Math.round(m)}m`);
+export const mem = (b: number) => (b >= 2 ** 30 ? `${(b / 2 ** 30).toFixed(1)}Gi` : `${Math.round(b / 2 ** 20)}Mi`);
+// "use / req" when metrics-server answers, else the request alone
+const usage = (u: Usage, fmt: (n: number) => string) => (u.use === null ? fmt(u.req) : `${fmt(u.use)} / ${fmt(u.req)}`);
+// a host older than these fields sends pods without them
+const NONE: Usage = { req: 0, use: null };
+const cpuOf = (p: Partial<Pick<PodView, "cpu">>) => p.cpu ?? NONE;
+const memOf = (p: Partial<Pick<PodView, "mem">>) => p.mem ?? NONE;
+const sum = (pods: PodView[], pick: (p: PodView) => Usage): Usage => ({
+  req: pods.reduce((s, p) => s + pick(p).req, 0),
+  use: pods.some((p) => pick(p).use !== null) ? pods.reduce((s, p) => s + (pick(p).use ?? 0), 0) : null,
+});
 
 const Label = ({ children }: { children: string }) => (
   <div className="mb-1 mt-3 text-[10.5px] font-medium uppercase tracking-[0.8px] text-ink-muted/80">{children}</div>
@@ -134,6 +147,11 @@ function WorkloadDetail({ w, all, onSelect }: { w: Workload; all: Workload[]; on
             <span className="truncate">{p.name}</span>
           </div>
           <div className="text-[10.5px] text-ink-muted">{p.phase} · {p.node ?? "not scheduled"} · {p.restarts} restarts</div>
+          {p.cpu && (
+            <div className="text-[10.5px] text-ink-muted" title={p.cpu.use === null ? "requests; no metrics-server reading" : "used / requested"}>
+              cpu {usage(p.cpu, cores)} · mem {usage(p.mem, mem)}
+            </div>
+          )}
           {p.reason && <div className="break-words text-[10.5px] text-ink-soft">{p.reason}</div>}
         </div>
       ))}
@@ -211,21 +229,37 @@ export default function Detail({ selected, clusters, workloads, onSelect, onClos
   } else if (selected.type === "node") {
     const c = clusters.find((x) => x.context === selected.context);
     const n = c?.nodes.find((x) => x.name === selected.node);
-    const on = workloads.filter((w) => w.cluster === selected.context && w.pods.some((p) => p.node === selected.node));
+    // each workload's share of this node: its pods here, heaviest first
+    const on = workloads
+      .filter((w) => w.cluster === selected.context && w.pods.some((p) => p.node === selected.node))
+      .map((w) => {
+        const here = w.pods.filter((p) => p.node === selected.node);
+        return { w, cpu: sum(here, cpuOf), mem: sum(here, memOf) };
+      })
+      .sort((a, b) => (b.cpu.use ?? b.cpu.req) - (a.cpu.use ?? a.cpu.req) || (b.mem.use ?? b.mem.req) - (a.mem.use ?? a.mem.req));
     if (n) {
-      const pct = (a: { req: number; alloc: number }) => (a.alloc ? Math.round((a.req / a.alloc) * 100) : 0);
+      const pct = (part: number | null, alloc: number) => (part === null || !alloc ? null : Math.round((part / alloc) * 100));
+      const line = (part: number | null, alloc: number, fmt: (x: number) => string) =>
+        part === null ? "no metrics-server" : `${pct(part, alloc)}% · ${fmt(part)} / ${fmt(alloc)}`;
+      const c = (m: number) => `${(m / 1000).toFixed(1)} cores`, g = (b: number) => `${(b / 2 ** 30).toFixed(1)} GiB`;
       body = (
         <>
           <div className="text-[14px] font-semibold text-ink">{n.name}</div>
-          <div className="text-[10.5px] text-ink-muted">{selected.context} · {n.ready ? "Ready" : "NotReady"}</div>
-          <div className="mt-3 grid grid-cols-[84px_1fr] gap-x-3 gap-y-1 text-[12px]">
+          <div className="text-[10.5px] text-ink-muted">{selected.context} · {rolesOf(n).join(", ") || "worker"} · {n.ready ? "Ready" : "NotReady"}</div>
+          <div className="mt-3 grid grid-cols-[84px_1fr] gap-x-3 gap-y-1 text-[12px]" title="Against the node's allocatable capacity, which is below its total: the kubelet reserves part for the system">
+            <span className="text-ink-muted">CPU use</span>
+            <span className="text-ink-soft">{line(n.cpu.use, n.cpu.alloc, c)}</span>
             <span className="text-ink-muted">CPU req.</span>
-            <span className="text-ink-soft">{pct(n.cpu)}% · {(n.cpu.req / 1000).toFixed(1)} / {(n.cpu.alloc / 1000).toFixed(1)} cores</span>
+            <span className="text-ink-soft">{line(n.cpu.req, n.cpu.alloc, c)}</span>
+            <span className="text-ink-muted">Memory use</span>
+            <span className="text-ink-soft">{line(n.mem.use, n.mem.alloc, g)}</span>
             <span className="text-ink-muted">Memory req.</span>
-            <span className="text-ink-soft">{pct(n.mem)}% · {(n.mem.req / 2 ** 30).toFixed(1)} / {(n.mem.alloc / 2 ** 30).toFixed(1)} GiB</span>
+            <span className="text-ink-soft">{line(n.mem.req, n.mem.alloc, g)}</span>
           </div>
-          <Label>{`Workloads on it · ${on.length}`}</Label>
-          {on.map((w) => <Row key={`${w.ns}/${w.name}`} w={w} onSelect={onSelect} right={w.ns} />)}
+          <Label>{`Workloads on it · ${on.length} · ${n.cpu.use === null ? "requested" : "used / requested"}`}</Label>
+          {on.map(({ w, cpu, mem: m }) => (
+            <Row key={`${w.ns}/${w.name}`} w={w} onSelect={onSelect} right={`${usage(cpu, cores)} · ${usage(m, mem)}`} />
+          ))}
         </>
       );
     }

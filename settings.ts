@@ -1,12 +1,12 @@
 // The plugin's settings slice: what may be saved, and how logos and groups resolve from it.
-import { imageIcon, providerIcon, SLUG_RE, type Snapshot, type Workload } from "./model.ts";
+import { imageIcon, matchesKey, providerIcon, SLUG_RE, type Snapshot, type Workload } from "./model.ts";
 
 export type K8sSettings = {
   contexts: string[]; // kube contexts to poll; empty polls nothing
   pollSeconds: number;
   kubectl: string;
   autoLogos: boolean; // guess logos from image names
-  logos: Record<string, string>; // `name` | `ns/name` | `context/ns/name` | `context` → slug or https URL
+  logos: Record<string, string>; // `name` | `ns/name` | `context/ns/name` | `context` (`*` within a segment) → slug or https URL
   groups: Record<string, string[]>; // group → patterns shaped like logo keys, `*` within a segment
 };
 
@@ -15,7 +15,7 @@ export const DEFAULTS: K8sSettings = { contexts: [], pollSeconds: 60, kubectl: "
 // passed to kubectl as one argv entry; the leading-dash ban keeps a name from reading as a flag
 export const CONTEXT_RE = /^[\w.@:/][\w.@:/-]{0,252}$/;
 const KUBECTL_RE = /^(kubectl|\/[\w./-]+)$/;
-const LOGO_KEY_RE = /^[\w.@:/-]{1,300}$/;
+const LOGO_KEY_RE = /^[\w.@:/*-]{1,300}$/;
 const MAX_LOGOS = 300;
 const GROUP_RE = /^[\w][\w .-]{0,39}$/;
 const PATTERN_RE = /^[\w.@:/*-]{1,300}$/;
@@ -73,25 +73,19 @@ const ROUTE = "/api/plugins/k8s";
 const logoUrl = (key: string, value: string) =>
   SLUG_RE.test(value) ? `${ROUTE}/icon/${value}` : `${ROUTE}/logo?key=${encodeURIComponent(key)}`;
 
+// an exact key wins over a pattern; patterns apply in their written order
 export function workloadLogo(w: Workload, s: K8sSettings): string | null {
-  for (const k of [`${w.cluster}/${w.ns}/${w.name}`, `${w.ns}/${w.name}`, w.name]) {
-    if (s.logos[k]) return logoUrl(k, s.logos[k]);
-  }
+  for (const k of [`${w.cluster}/${w.ns}/${w.name}`, `${w.ns}/${w.name}`, w.name]) if (s.logos[k]) return logoUrl(k, s.logos[k]);
+  for (const [k, v] of Object.entries(s.logos)) if (k.includes("*") && matchesKey(w, k)) return logoUrl(k, v);
   // the annotation lives in the cluster: a slug only, never a URL the host would fetch
   if (w.logoHint && SLUG_RE.test(w.logoHint)) return `${ROUTE}/icon/${w.logoHint}`;
   const auto = s.autoLogos ? imageIcon(w.images) : null;
   return auto ? `${ROUTE}/icon/${auto}` : null;
 }
 
-const globRe = (pattern: string) =>
-  new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", "[^/]*")}$`);
-
-// first group with a matching pattern wins, then the annotation; a pattern matches the key with as many segments
+// first group with a matching pattern wins, then the annotation
 export function workloadGroup(w: Workload, s: K8sSettings): string | null {
-  const keys = [w.name, `${w.ns}/${w.name}`, `${w.cluster}/${w.ns}/${w.name}`];
-  for (const [group, patterns] of Object.entries(s.groups)) {
-    if (patterns.some((p) => globRe(p).test(keys[p.split("/").length - 1] ?? ""))) return group;
-  }
+  for (const [group, patterns] of Object.entries(s.groups)) if (patterns.some((p) => matchesKey(w, p))) return group;
   return w.groupHint && GROUP_RE.test(w.groupHint) ? w.groupHint : null;
 }
 

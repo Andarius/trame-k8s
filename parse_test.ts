@@ -40,7 +40,8 @@ const items: KubeItem[] = [
   }),
   pod("pg-0", { kind: "StatefulSet", name: "pg" }, { ns: "data" }),
   pod("etl-29000-x", { kind: "Job", name: "etl-29000" }, { node: null, status: { phase: "Pending", conditions: [{ type: "PodScheduled", status: "False", message: "0/2 nodes are available: 2 Insufficient cpu." }] } }),
-  { kind: "Node", metadata: { name: "n1" }, spec: { providerID: "scaleway://instance/fr-par-1/abc" }, status: { allocatable: { cpu: "4", memory: "8Gi" }, conditions: [{ type: "Ready", status: "True" }] } },
+  { kind: "PodMetrics", metadata: meta("api-7d9f-a"), containers: [{ name: "api", usage: { cpu: "100m", memory: "200Mi" } }, { name: "side", usage: { cpu: "50m", memory: "56Mi" } }] },
+  { kind: "Node", metadata: { name: "n1", labels: { "node-role.kubernetes.io/control-plane": "true", "node-role.kubernetes.io/etcd": "true" } }, spec: { providerID: "scaleway://instance/fr-par-1/abc" }, status: { allocatable: { cpu: "4", memory: "8Gi" }, conditions: [{ type: "Ready", status: "True" }] } },
 ];
 const cluster = parseCluster("dev", { items }, T);
 const find = (ns: string, name: string) => cluster.workloads.find((w) => w.ns === ns && w.name === name)!;
@@ -69,7 +70,16 @@ describe("parseCluster", () => {
 
   test("unscheduled pods keep a null node, and node requests sum running pods only", () => {
     expect(find("app", "etl").pods[0].node).toBeNull();
-    expect(cluster.nodes[0]).toMatchObject({ ready: true, cpu: { alloc: 4000, req: 1500 }, mem: { alloc: 8 * 2 ** 30, req: 3 * 2 ** 30 } });
+    expect(cluster.nodes[0]).toMatchObject({
+      ready: true, roles: ["control-plane", "etcd"],
+      cpu: { alloc: 4000, req: 1500, use: 150 }, mem: { alloc: 8 * 2 ** 30, req: 3 * 2 ** 30, use: 256 * 2 ** 20 },
+    });
+  });
+
+  test("pods carry their requests and metrics-server usage, null without a reading", () => {
+    const [a, b] = find("app", "api").pods;
+    expect([a.cpu, a.mem]).toEqual([{ req: 500, use: 150 }, { req: 2 ** 30, use: 256 * 2 ** 20 }]);
+    expect([b.cpu.use, b.mem.use]).toEqual([null, null]);
     expect(cluster.provider).toBe("scaleway");
   });
 });
