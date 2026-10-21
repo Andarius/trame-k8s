@@ -30,6 +30,7 @@ export type KubeItem = {
 export type KubeList = { items: KubeItem[] };
 
 const LOGO_ANNOTATION = "trame.dev/logo";
+const GROUP_ANNOTATION = "trame.dev/group";
 const WORKLOAD_KINDS = new Set<string>(["Deployment", "StatefulSet", "DaemonSet", "CronJob"]);
 
 const num = (v: unknown, fallback = 0) => (typeof v === "number" ? v : fallback);
@@ -191,6 +192,8 @@ export function parseCluster(context: string, list: KubeList, polledAt: string):
       failed,
       logoHint: item.metadata.annotations?.[LOGO_ANNOTATION] ?? null,
       logo: null,
+      groupHint: item.metadata.annotations?.[GROUP_ANNOTATION] ?? null,
+      group: null,
     };
     workloads.push(w);
     labelsOf.set(w, tpl.metadata?.labels ?? {});

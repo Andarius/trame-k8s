@@ -6,7 +6,7 @@ const NOW = Date.parse("2026-10-20T12:00:00Z");
 const w = (over: Partial<Workload>): Workload => ({
   cluster: "dev", ns: "app", name: "api", kind: "Deployment", desired: 2, ready: 2, images: ["reg/api:v1"],
   rolledAt: "2026-10-19T12:00:00Z", services: [], hosts: [], deps: [], pods: [], reason: null, restarts: 0,
-  failed: false, logoHint: null, logo: null, ...over,
+  failed: false, logoHint: null, logo: null, groupHint: null, group: null, ...over,
 });
 
 test.each<{ id: string; over: Partial<Workload>; want: Health }>([

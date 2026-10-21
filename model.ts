@@ -31,6 +31,8 @@ export type Workload = {
   failed: boolean; // CronJob only: last job failed
   logoHint: string | null; // `trame.dev/logo` annotation (a simple-icons slug)
   logo: string | null; // resolved URL, filled per /state request
+  groupHint: string | null; // `trame.dev/group` annotation
+  group: string | null; // resolved per /state request
 };
 
 export type NodeView = {

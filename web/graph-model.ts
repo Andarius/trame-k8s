@@ -4,6 +4,7 @@ import { type ClusterView, type Health, health, type Workload } from "../model.t
 export type Ref =
   | { type: "cluster"; context: string }
   | { type: "ns"; context: string; ns: string }
+  | { type: "group"; context: string; group: string }
   | { type: "workload"; context: string; ns: string; name: string }
   | { type: "app"; app: string }
   | { type: "node"; context: string; node: string };
@@ -57,12 +58,24 @@ export const HEALTH_LABEL: Record<Health, string> = {
   zero: "Scaled to 0",
 };
 const NS_COLOR = "var(--color-chart-7)";
+const GROUP_COLOR = "var(--color-chart-5)";
 const DRIFT = "var(--color-paused)";
 const HOT = "var(--color-copper)";
 const BUSY_NODE = 0.85;
 
 export const workloadId = (w: Pick<Workload, "cluster" | "ns" | "name">) => `w:${w.cluster}/${w.ns}/${w.name}`;
 export const appKey = (w: Pick<Workload, "ns" | "name">) => `${w.ns}/${w.name}`;
+
+// a cluster's sections: groups first, then the namespaces of ungrouped workloads
+export function sectionsOf(ws: Workload[]): { key: string; label: string; group: boolean; ws: Workload[] }[] {
+  const out = new Map<string, { key: string; label: string; group: boolean; ws: Workload[] }>();
+  for (const w of [...ws].sort((a, b) => Number(!a.group) - Number(!b.group) || (a.group ?? "").localeCompare(b.group ?? ""))) {
+    const key = w.group ? `g:${w.group}` : `n:${w.ns}`;
+    if (!out.has(key)) out.set(key, { key, label: w.group ?? w.ns, group: !!w.group, ws: [] });
+    out.get(key)!.ws.push(w);
+  }
+  return [...out.values()];
+}
 export const tagOf = (image: string) => image.replace(/@.*$/, "").match(/:([^/:]+)$/)?.[1] ?? "latest";
 const short = (s: string, max = 28) => (s.length > max ? `${s.slice(0, max - 1)}…` : s);
 
@@ -120,18 +133,20 @@ function workloadNode(w: Workload, now: number, id = workloadId(w)): GNode {
   };
 }
 
-// cluster → namespace → workload; a workload drifts out from its namespace as its last rollout ages
+// cluster → group or namespace → workload; a workload drifts out from its hub as its last rollout ages
 function infra(clusters: ClusterView[], ws: Workload[], now: number): GraphData {
   const nodes: GNode[] = [], links: GLink[] = [];
   for (const c of clusters) {
     const own = ws.filter((w) => w.cluster === c.context);
     nodes.push(clusterNode(c, own));
-    for (const ns of new Set(own.map((w) => w.ns))) {
-      const inNs = own.filter((w) => w.ns === ns);
-      const id = `n:${c.context}/${ns}`;
+    for (const sec of sectionsOf(own)) {
+      const inNs = sec.ws;
+      const id = `${sec.key[0]}:${c.context}/${sec.label}`;
       nodes.push({
-        id, kind: "ns", label: ns, r: 6, color: NS_COLOR, labelAlways: true, charge: -150,
-        tip: [ns, `${c.context} · ${inNs.length} workloads`], ref: { type: "ns", context: c.context, ns },
+        id, kind: "ns", label: sec.group ? `◆ ${sec.label}` : sec.label, r: sec.group ? 8 : 6,
+        color: sec.group ? GROUP_COLOR : NS_COLOR, labelAlways: true, charge: sec.group ? -220 : -150,
+        tip: [sec.label, `${sec.group ? "group" : "namespace"} · ${c.context} · ${inNs.length} workloads`],
+        ref: sec.group ? { type: "group", context: c.context, group: sec.label } : { type: "ns", context: c.context, ns: sec.label },
       });
       links.push({ source: `c:${c.context}`, target: id, dist: 45, width: 1.3 });
       for (const w of inNs) {

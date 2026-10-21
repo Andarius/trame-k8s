@@ -159,19 +159,24 @@ export default function Detail({ selected, clusters, workloads, onSelect, onClos
   if (selected.type === "workload") {
     const w = workloads.find((x) => x.cluster === selected.context && x.ns === selected.ns && x.name === selected.name);
     if (w) body = <WorkloadDetail w={w} all={workloads} onSelect={onSelect} />;
-  } else if (selected.type === "cluster" || selected.type === "ns") {
+  } else if (selected.type === "cluster" || selected.type === "ns" || selected.type === "group") {
     const c = clusters.find((x) => x.context === selected.context);
-    const own = workloads.filter((w) => w.cluster === selected.context && (selected.type === "cluster" || w.ns === selected.ns));
+    const own = workloads.filter((w) =>
+      w.cluster === selected.context &&
+      (selected.type === "cluster" || (selected.type === "ns" ? w.ns === selected.ns : w.group === selected.group))
+    );
     const bad = own.filter((w) => ["deg", "down"].includes(health(w)));
     if (c) {
       body = (
         <>
           <div className="flex items-center gap-2">
             {selected.type === "cluster" ? <Logo src={c.logo} size={18} /> : null}
-            <span className="text-[14px] font-semibold text-ink">{selected.type === "ns" ? selected.ns : c.context}</span>
+            <span className="text-[14px] font-semibold text-ink">
+              {selected.type === "ns" ? selected.ns : selected.type === "group" ? `◆ ${selected.group}` : c.context}
+            </span>
           </div>
           <div className="text-[10.5px] text-ink-muted">
-            {selected.type === "ns" ? `${c.context} · ` : `${c.provider ?? "unknown provider"} · ${c.nodes.length} nodes · `}
+            {selected.type === "cluster" ? `${c.provider ?? "unknown provider"} · ${c.nodes.length} nodes · ` : `${c.context} · `}
             {own.length} workloads · polled {ago(c.polledAt)} ago
           </div>
           {c.error && <div className="mt-2 break-words text-[11.5px] text-blocked">{c.error}</div>}
@@ -182,7 +187,7 @@ export default function Detail({ selected, clusters, workloads, onSelect, onClos
             </>
           )}
           <Label>Workloads</Label>
-          {own.map((w) => <Row key={`${w.ns}/${w.name}`} w={w} onSelect={onSelect} right={selected.type === "cluster" ? w.ns : undefined} />)}
+          {own.map((w) => <Row key={`${w.ns}/${w.name}`} w={w} onSelect={onSelect} right={selected.type === "ns" ? undefined : w.ns} />)}
         </>
       );
     }

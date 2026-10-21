@@ -2,7 +2,7 @@
 // The backend poller owns freshness; this view re-reads the in-memory snapshot.
 import { useEffect, useMemo, useState } from "react";
 import { type PanelProps, timeAgo } from "@trame/web-api";
-import { isSystem, type Snapshot, unhealthy, type Workload } from "../model.ts";
+import { type Health, health, isSystem, type Snapshot, unhealthy, type Workload } from "../model.ts";
 import { getState, loadPref, refreshState, savePref } from "./api.ts";
 import { buildGraph, type GraphView, HEALTH_COLOR, HEALTH_LABEL, type Ref } from "./graph-model.ts";
 import Columns from "./Columns.tsx";
@@ -23,7 +23,7 @@ const pill = (on: boolean) =>
   `rounded-md border px-2 py-0.5 text-[11.5px] ${on ? "border-copper text-copper" : "border-chipline text-ink-soft hover:border-ink-muted"}`;
 
 function matches(w: Workload, q: string): boolean {
-  return !q || [w.name, w.ns, w.cluster, ...w.images, ...w.hosts].some((s) => s.toLowerCase().includes(q));
+  return !q || [w.name, w.ns, w.cluster, w.group ?? "", ...w.images, ...w.hosts].some((s) => s.toLowerCase().includes(q));
 }
 
 export function K8sPanel({ onOpenSettings }: Pick<PanelProps, "onOpenSettings">) {
@@ -34,12 +34,15 @@ export function K8sPanel({ onOpenSettings }: Pick<PanelProps, "onOpenSettings">)
   const [hidden, setHidden] = useState<string[]>(() => loadPref("hidden", []));
   const [system, setSystem] = useState<boolean>(() => loadPref("system", false));
   const [issues, setIssues] = useState(false);
+  const [onlyHealth, setOnlyHealth] = useState<Health | null>(null);
+  const [onlyGroup, setOnlyGroup] = useState<string | null>(() => loadPref<string | null>("group", null));
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Ref | null>(null);
 
   useEffect(() => savePref("view", view), [view]);
   useEffect(() => savePref("hidden", hidden), [hidden]);
   useEffect(() => savePref("system", system), [system]);
+  useEffect(() => savePref("group", onlyGroup), [onlyGroup]);
 
   useEffect(() => {
     let alive = true;
@@ -59,14 +62,27 @@ export function K8sPanel({ onOpenSettings }: Pick<PanelProps, "onOpenSettings">)
   };
 
   const all = useMemo(() => snap?.clusters.flatMap((c) => c.workloads) ?? [], [snap]);
+  const groups = useMemo(() => [...new Set(all.map((w) => w.group).filter((g): g is string => !!g))].sort(), [all]);
+  // a remembered group that no longer exists filters nothing
+  const group = onlyGroup && groups.includes(onlyGroup) ? onlyGroup : null;
   const clusters = useMemo(() => snap?.clusters.filter((c) => !hidden.includes(c.context)) ?? [], [snap, hidden]);
   const q = query.trim().toLowerCase();
-  const shown = useMemo(
+  const filtered = useMemo(
     () =>
       clusters.flatMap((c) => c.workloads).filter((w) =>
-        (system || !isSystem(w.ns)) && (!issues || unhealthy(w)) && matches(w, q)
+        (system || !isSystem(w.ns)) && (!issues || unhealthy(w)) && (!group || w.group === group) && matches(w, q)
       ),
-    [clusters, system, issues, q],
+    [clusters, system, issues, group, q],
+  );
+  // legend counts cover the other filters, so a state's count is what clicking it shows
+  const healthCount = useMemo(() => {
+    const n: Partial<Record<Health, number>> = {};
+    for (const w of filtered) n[health(w)] = (n[health(w)] ?? 0) + 1;
+    return n;
+  }, [filtered]);
+  const shown = useMemo(
+    () => (onlyHealth ? filtered.filter((w) => health(w) === onlyHealth) : filtered),
+    [filtered, onlyHealth],
   );
   const graph = useMemo(() => (view === "columns" ? null : buildGraph(view, clusters, shown)), [view, clusters, shown]);
 
@@ -89,7 +105,6 @@ export function K8sPanel({ onOpenSettings }: Pick<PanelProps, "onOpenSettings">)
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-2">
-        <span className="mr-1 text-[15px] font-semibold text-ink">⎈ Kubernetes</span>
         <div className="mr-2 flex overflow-hidden rounded-md border border-chipline">
           {VIEWS.map((v) => (
             <button
@@ -118,6 +133,17 @@ export function K8sPanel({ onOpenSettings }: Pick<PanelProps, "onOpenSettings">)
             </button>
           );
         })}
+        {groups.map((g) => (
+          <button
+            key={g}
+            type="button"
+            onClick={() => setOnlyGroup(group === g ? null : g)}
+            className={pill(group === g)}
+            title={`Only the ${g} group`}
+          >
+            ◆ {g}
+          </button>
+        ))}
         <button type="button" onClick={() => setSystem(!system)} className={pill(system)} title="Show kube-system, cert-manager, argocd, …">
           system ns
         </button>
@@ -150,13 +176,22 @@ export function K8sPanel({ onOpenSettings }: Pick<PanelProps, "onOpenSettings">)
       </div>
       <div className="flex flex-wrap gap-3 border-t border-line px-3 py-1.5 text-[10.5px] text-ink-muted">
         {(Object.keys(HEALTH_LABEL) as (keyof typeof HEALTH_LABEL)[]).map((h) => (
-          <span key={h} className="inline-flex items-center gap-1 whitespace-nowrap">
+          <button
+            key={h}
+            type="button"
+            onClick={() => setOnlyHealth(onlyHealth === h ? null : h)}
+            title={onlyHealth === h ? "Show every state" : `Only ${HEALTH_LABEL[h].toLowerCase()}`}
+            className={`inline-flex items-center gap-1 whitespace-nowrap rounded px-1 -mx-1 ${
+              onlyHealth === h ? "bg-active-row text-copper" : onlyHealth ? "opacity-50 hover:opacity-100" : "hover:text-ink"
+            }`}
+          >
             <span
               className="inline-block size-[7px] rounded-full"
               style={h === "zero" ? { boxShadow: `inset 0 0 0 1.5px ${HEALTH_COLOR[h]}` } : { background: HEALTH_COLOR[h] }}
             />
             {HEALTH_LABEL[h]}
-          </span>
+            <span className="tabular-nums text-ink-muted/80">{healthCount[h] ?? 0}</span>
+          </button>
         ))}
         {view !== "columns" && <span className="whitespace-nowrap">scroll to zoom · drag · click to peek</span>}
         <span className="ml-auto whitespace-nowrap">{shown.length} workloads</span>

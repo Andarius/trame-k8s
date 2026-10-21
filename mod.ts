@@ -3,7 +3,7 @@
 import type { Plugin, PluginSettings } from "@trame/plugin-api";
 import { type ClusterView, SLUG_RE, type Snapshot, unhealthy } from "./model.ts";
 import { fetchCluster, listContexts } from "./kube.ts";
-import { isHttpsUrl, readSettings, sanitizeSettings, withLogos } from "./settings.ts";
+import { isHttpsUrl, readSettings, sanitizeSettings, withSettings } from "./settings.ts";
 
 const ICON_CDN = "https://cdn.simpleicons.org";
 const MAX_LOGO_BYTES = 512 * 1024;
@@ -83,10 +83,10 @@ const plugin: Plugin = {
   ungatedRoutes: ["/contexts"],
 
   async routes(req, subPath, url) {
-    if (subPath === "/state" && req.method === "GET") return json(withLogos(snapshot, await settings()));
+    if (subPath === "/state" && req.method === "GET") return json(withSettings(snapshot, await settings()));
     if (subPath === "/refresh" && req.method === "POST") {
       await poll();
-      return json(withLogos(snapshot, await settings()));
+      return json(withSettings(snapshot, await settings()));
     }
     if (subPath === "/contexts" && req.method === "GET") {
       try {

@@ -1,4 +1,4 @@
-// The plugin's settings slice: what may be saved, and how logos resolve from it.
+// The plugin's settings slice: what may be saved, and how logos and groups resolve from it.
 import { imageIcon, providerIcon, SLUG_RE, type Snapshot, type Workload } from "./model.ts";
 
 export type K8sSettings = {
@@ -7,15 +7,20 @@ export type K8sSettings = {
   kubectl: string;
   autoLogos: boolean; // guess logos from image names
   logos: Record<string, string>; // `name` | `ns/name` | `context/ns/name` | `context` → slug or https URL
+  groups: Record<string, string[]>; // group → patterns shaped like logo keys, `*` within a segment
 };
 
-export const DEFAULTS: K8sSettings = { contexts: [], pollSeconds: 60, kubectl: "kubectl", autoLogos: true, logos: {} };
+export const DEFAULTS: K8sSettings = { contexts: [], pollSeconds: 60, kubectl: "kubectl", autoLogos: true, logos: {}, groups: {} };
 
 // passed to kubectl as one argv entry; the leading-dash ban keeps a name from reading as a flag
 export const CONTEXT_RE = /^[\w.@:/][\w.@:/-]{0,252}$/;
 const KUBECTL_RE = /^(kubectl|\/[\w./-]+)$/;
 const LOGO_KEY_RE = /^[\w.@:/-]{1,300}$/;
 const MAX_LOGOS = 300;
+const GROUP_RE = /^[\w][\w .-]{0,39}$/;
+const PATTERN_RE = /^[\w.@:/*-]{1,300}$/;
+const MAX_GROUPS = 50;
+const MAX_PATTERNS = 100;
 
 export const isHttpsUrl = (v: string) => {
   try {
@@ -49,6 +54,17 @@ export function sanitizeSettings(raw: Record<string, unknown>, _current: Record<
       .slice(0, MAX_LOGOS);
     out.logos = Object.fromEntries(entries);
   }
+  if (raw.groups && typeof raw.groups === "object" && !Array.isArray(raw.groups)) {
+    const entries = Object.entries(raw.groups as Record<string, unknown>)
+      .filter((e): e is [string, unknown[]] => GROUP_RE.test(e[0]) && Array.isArray(e[1]))
+      .map(([g, ps]): [string, string[]] => [
+        g,
+        [...new Set(ps.filter((p): p is string => typeof p === "string" && PATTERN_RE.test(p)))].slice(0, MAX_PATTERNS),
+      ])
+      .filter(([, ps]) => ps.length)
+      .slice(0, MAX_GROUPS);
+    out.groups = Object.fromEntries(entries);
+  }
   return out;
 }
 
@@ -67,7 +83,19 @@ export function workloadLogo(w: Workload, s: K8sSettings): string | null {
   return auto ? `${ROUTE}/icon/${auto}` : null;
 }
 
-export function withLogos(snap: Snapshot, s: K8sSettings): Snapshot {
+const globRe = (pattern: string) =>
+  new RegExp(`^${pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replaceAll("*", "[^/]*")}$`);
+
+// first group with a matching pattern wins, then the annotation; a pattern matches the key with as many segments
+export function workloadGroup(w: Workload, s: K8sSettings): string | null {
+  const keys = [w.name, `${w.ns}/${w.name}`, `${w.cluster}/${w.ns}/${w.name}`];
+  for (const [group, patterns] of Object.entries(s.groups)) {
+    if (patterns.some((p) => globRe(p).test(keys[p.split("/").length - 1] ?? ""))) return group;
+  }
+  return w.groupHint && GROUP_RE.test(w.groupHint) ? w.groupHint : null;
+}
+
+export function withSettings(snap: Snapshot, s: K8sSettings): Snapshot {
   return {
     ...snap,
     clusters: snap.clusters.map((c) => {
@@ -76,7 +104,7 @@ export function withLogos(snap: Snapshot, s: K8sSettings): Snapshot {
       return {
         ...c,
         logo: own ? logoUrl(c.context, own) : auto ? `${ROUTE}/icon/${auto}` : null,
-        workloads: c.workloads.map((w) => ({ ...w, logo: workloadLogo(w, s) })),
+        workloads: c.workloads.map((w) => ({ ...w, logo: workloadLogo(w, s), group: workloadGroup(w, s) })),
       };
     }),
   };

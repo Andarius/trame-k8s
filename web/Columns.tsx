@@ -1,8 +1,8 @@
-// One column per cluster, workloads grouped by namespace.
+// One column per cluster, workloads in their group, else their namespace.
 import { useState } from "react";
 import { openInBrowser } from "@trame/web-api";
 import { type ClusterView, unhealthy, type Workload } from "../model.ts";
-import { appKey, driftOf, type Ref, tagOf } from "./graph-model.ts";
+import { appKey, driftOf, type Ref, sectionsOf, tagOf } from "./graph-model.ts";
 import { Dot, Logo } from "./Detail.tsx";
 
 const KIND_TAG = { Deployment: null, StatefulSet: "sts", DaemonSet: "ds", CronJob: "cron" } as const;
@@ -23,7 +23,7 @@ export default function Columns({ clusters, workloads, onSelect }: {
       {clusters.map((c) => {
         const own = workloads.filter((w) => w.cluster === c.context);
         const bad = own.filter(unhealthy).length;
-        const namespaces = [...new Set(own.map((w) => w.ns))];
+
         return (
           <section key={c.context} className="flex min-w-[240px] flex-1 flex-col bg-panel">
             <button
@@ -40,12 +40,12 @@ export default function Columns({ clusters, workloads, onSelect }: {
             </button>
             {c.error && <div className="break-words border-b border-line px-3 py-1.5 text-[10.5px] text-blocked" title={c.error}>{c.error}</div>}
             <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-3">
-              {namespaces.map((ns) => {
-                const key = `${c.context}/${ns}`;
+              {sectionsOf(own).map((sec) => {
+                const key = `${c.context}/${sec.key}`;
                 const open = !folded.has(key);
-                const inNs = own.filter((w) => w.ns === ns);
+                const inNs = sec.ws;
                 return (
-                  <div key={ns}>
+                  <div key={sec.key}>
                     <button
                       type="button"
                       onClick={() => setFolded((f) => {
@@ -56,7 +56,7 @@ export default function Columns({ clusters, workloads, onSelect }: {
                       })}
                       className="mb-1 mt-2.5 flex w-full items-center gap-1 text-[10.5px] font-medium uppercase tracking-[0.8px] text-ink-muted/80 hover:text-ink-soft"
                     >
-                      {open ? "▾" : "▸"} {ns}
+                      {open ? "▾" : "▸"} {sec.group && <span className="text-[color:var(--color-chart-5)]">◆</span>} {sec.label}
                       <span className="ml-auto normal-case tracking-normal text-ink-muted/60">
                         {inNs.some(unhealthy) && <span className="mr-1 text-blocked">●</span>}
                         {inNs.length}
@@ -64,7 +64,7 @@ export default function Columns({ clusters, workloads, onSelect }: {
                     </button>
                     {open && inNs.map((w) => (
                       <div
-                        key={w.name}
+                        key={`${w.ns}/${w.name}`}
                         role="button"
                         tabIndex={0}
                         onClick={() => onSelect({ type: "workload", context: w.cluster, ns: w.ns, name: w.name })}
@@ -76,6 +76,7 @@ export default function Columns({ clusters, workloads, onSelect }: {
                           <Logo src={w.logo} />
                           <span className="min-w-0 truncate text-ink" title={w.name}>{w.name}</span>
                           {KIND_TAG[w.kind] && <span className="flex-none text-[10px] text-ink-muted">{KIND_TAG[w.kind]}</span>}
+                          {sec.group && <span className="min-w-0 truncate text-[10px] text-ink-muted/70" title="namespace">{w.ns}</span>}
                           <span className="ml-auto flex-none text-[10.5px] text-ink-muted">{w.ready}/{w.desired}</span>
                         </div>
                         <div className="mt-0.5 flex items-center gap-2 text-[10.5px]">

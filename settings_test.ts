@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Workload } from "./model.ts";
-import { readSettings, sanitizeSettings, workloadLogo } from "./settings.ts";
+import { readSettings, sanitizeSettings, workloadGroup, workloadLogo } from "./settings.ts";
 
 // contexts and the kubectl path become argv entries: nothing may read as a flag or carry arguments
 test.each([
@@ -17,13 +17,18 @@ test.each([
     raw: { logos: { api: "fastapi", web: "https://cdn.test/web.svg", bad: "http://cdn.test/x.svg", evil: "file:///etc/passwd", "a b": "react" } },
     want: { logos: { api: "fastapi", web: "https://cdn.test/web.svg" } },
   },
+  {
+    id: "groups keep valid names and patterns, drop empty groups",
+    raw: { groups: { ai: ["langfuse*", "a b", "llm-*", "llm-*"], "-x": ["web"], empty: ["?"], data: "pg" } },
+    want: { groups: { ai: ["langfuse*", "llm-*"] } },
+  },
 ])("sanitizeSettings: $id", ({ raw, want }) => {
   expect(sanitizeSettings(raw, {})).toEqual(want);
 });
 
 const w = (over: Partial<Workload>): Workload => ({
   cluster: "dev", ns: "app", name: "api", kind: "Deployment", desired: 1, ready: 1, images: ["reg/api:v1"], rolledAt: null,
-  services: [], hosts: [], deps: [], pods: [], reason: null, restarts: 0, failed: false, logoHint: null, logo: null, ...over,
+  services: [], hosts: [], deps: [], pods: [], reason: null, restarts: 0, failed: false, logoHint: null, logo: null, groupHint: null, group: null, ...over,
 });
 
 test.each([
@@ -35,4 +40,17 @@ test.each([
   { id: "tag does not decide", over: { images: ["reg/backend:postgres-16"] }, logos: {}, want: null },
 ])("workloadLogo: $id", ({ over, logos, want }) => {
   expect(workloadLogo(w(over), readSettings({ logos }))).toBe(want);
+});
+
+test.each([
+  { id: "name glob", over: { name: "langfuse-web" }, groups: { ai: ["langfuse*"] }, want: "ai" },
+  { id: "glob stays within its segment", over: { ns: "langfuse", name: "web" }, groups: { ai: ["langfuse*"] }, want: null },
+  { id: "whole namespace", over: { ns: "ml", name: "trainer" }, groups: { ai: ["ml/*"] }, want: "ai" },
+  { id: "context-scoped pattern", over: { cluster: "prod", name: "api" }, groups: { core: ["dev/*/api"] }, want: null },
+  { id: "dots are literal", over: { name: "llmxapi" }, groups: { ai: ["llm.api"] }, want: null },
+  { id: "first group wins", over: { name: "litellm" }, groups: { ai: ["litellm"], proxy: ["lite*"] }, want: "ai" },
+  { id: "settings beat the annotation", over: { name: "litellm", groupHint: "infra" }, groups: { ai: ["litellm"] }, want: "ai" },
+  { id: "annotation as fallback", over: { groupHint: "infra" }, groups: {}, want: "infra" },
+])("workloadGroup: $id", ({ over, groups, want }) => {
+  expect(workloadGroup(w(over), readSettings({ groups }))).toBe(want);
 });

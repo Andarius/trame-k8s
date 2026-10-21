@@ -1,10 +1,17 @@
-// Kubernetes settings: which contexts to poll (nothing is polled until one is ticked), cadence, logos.
+// Kubernetes settings: which contexts to poll (nothing is polled until one is ticked), cadence, logos, groups.
 import { useEffect, useState } from "react";
 import { getPluginSettings, savePluginSettings } from "@trame/web-api";
 import { listContexts, refreshState } from "./api.ts";
 
-type Slice = { contexts: string[]; pollSeconds: number; kubectl: string; autoLogos: boolean; logos: Record<string, string> };
-const DEFAULTS: Slice = { contexts: [], pollSeconds: 60, kubectl: "kubectl", autoLogos: true, logos: {} };
+type Slice = {
+  contexts: string[];
+  pollSeconds: number;
+  kubectl: string;
+  autoLogos: boolean;
+  logos: Record<string, string>;
+  groups: Record<string, string[]>;
+};
+const DEFAULTS: Slice = { contexts: [], pollSeconds: 60, kubectl: "kubectl", autoLogos: true, logos: {}, groups: {} };
 
 const input = "rounded-md border border-line bg-panel px-2.5 py-1.5 text-[11.5px] text-ink outline-none focus:border-chipline";
 const label = "mb-1.5 mt-4 text-[10.5px] font-medium uppercase tracking-[0.8px] text-ink-muted/80";
@@ -16,11 +23,20 @@ const fromLines = (text: string) =>
       .map(([k, ...v]) => [k, v.join("=")]),
   );
 
+const groupsToLines = (groups: Record<string, string[]>) =>
+  Object.entries(groups).map(([g, ps]) => `${g} = ${ps.join(", ")}`).join("\n");
+const groupsFromLines = (text: string) =>
+  Object.fromEntries(
+    Object.entries(fromLines(text)).map(([g, v]) => [g, v.split(",").map((p) => p.trim()).filter(Boolean)]),
+  );
+
 export function K8sSettings() {
   const [slice, setSlice] = useState<Slice | null>(null);
   const [available, setAvailable] = useState<string[]>([]);
   const [contextError, setContextError] = useState<string | null>(null);
   const [logoText, setLogoText] = useState("");
+  const [groupText, setGroupText] = useState("");
+  const [groupStatus, setGroupStatus] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
   const loadContexts = () =>
@@ -34,6 +50,7 @@ export function K8sSettings() {
       const s = { ...DEFAULTS, ...raw } as Slice;
       setSlice(s);
       setLogoText(toLines(s.logos));
+      setGroupText(groupsToLines(s.groups));
     });
     void loadContexts();
   }, []);
@@ -55,6 +72,14 @@ export function K8sSettings() {
     const dropped = Object.keys(wanted).filter((k) => !(k in next.logos));
     setLogoText(toLines(next.logos));
     setStatus(dropped.length ? `Ignored (need a simple-icons slug or an https URL): ${dropped.join(", ")}` : "Saved");
+  };
+  const saveGroups = async () => {
+    const wanted = groupsFromLines(groupText);
+    const next = await save({ groups: wanted });
+    const kept = new Set(Object.entries(next.groups).flatMap(([g, ps]) => ps.map((p) => `${g}=${p}`)));
+    const dropped = Object.entries(wanted).flatMap(([g, ps]) => ps.filter((p) => !kept.has(`${g}=${p}`)).map((p) => `${g}: ${p}`));
+    setGroupText(groupsToLines(next.groups));
+    setGroupStatus(dropped.length ? `Ignored: ${dropped.join(", ")}` : "Saved");
   };
   // contexts saved earlier but gone from the kubeconfig stay listed, so they can be unticked
   const shown = [...new Set([...available, ...slice.contexts])];
@@ -121,6 +146,27 @@ export function K8sSettings() {
           Save logos
         </button>
         {status && <span className="text-[11px] text-ink-muted">{status}</span>}
+      </div>
+
+      <div className={label}>Groups</div>
+      <p className="mb-1.5 text-[11.5px] text-ink-muted">
+        One group per line: a name, <code>=</code>, then comma-separated patterns shaped like logo keys
+        (<code>name</code>, <code>ns/name</code>, <code>context/ns/name</code>), where <code>*</code> matches within a
+        segment. The first matching line wins. A workload can also carry a <code>trame.dev/group: &lt;name&gt;</code>{" "}
+        annotation.
+      </p>
+      <textarea
+        value={groupText}
+        onChange={(e) => setGroupText(e.target.value)}
+        rows={4}
+        placeholder={"ai = langfuse*, litellm, llm-*\ndata = data/*, *-postgres"}
+        className={`${input} w-full font-mono`}
+      />
+      <div className="mt-1.5 flex items-center gap-2">
+        <button type="button" onClick={() => void saveGroups()} className="rounded-md bg-copper px-2.5 py-1 text-[11.5px] font-medium text-copper-ink">
+          Save groups
+        </button>
+        {groupStatus && <span className="text-[11px] text-ink-muted">{groupStatus}</span>}
       </div>
     </div>
   );
