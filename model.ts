@@ -1,4 +1,4 @@
-// Snapshot shapes shared by the backend (parse.ts, mod.ts) and the panel (web/).
+// Snapshot shapes the backend (src/model.rs) serves and the panel (web/) reads; matching rules mirror src/model.rs.
 
 export type WorkloadKind = "Deployment" | "StatefulSet" | "DaemonSet" | "CronJob";
 
@@ -90,62 +90,6 @@ export const unhealthy = (w: Workload) => {
   const h = health(w);
   return h === "deg" || h === "down";
 };
-
-// image repo → simple-icons slug; first match wins, so specific patterns come first
-const IMAGE_ICONS: [RegExp, string][] = [
-  [/ingress-nginx|nginx/, "nginx"],
-  [/argoproj|argocd/, "argo"],
-  [/cloudnative-pg|postgres|pgbouncer|timescale/, "postgresql"],
-  [/redis|valkey/, "redis"],
-  [/grafana|loki|tempo|mimir|alloy/, "grafana"],
-  [/prometheus|alertmanager|node-exporter|kube-state-metrics/, "prometheus"],
-  [/cert-manager|jetstack/, "letsencrypt"],
-  [/traefik/, "traefikproxy"],
-  [/rabbitmq/, "rabbitmq"],
-  [/mongo/, "mongodb"],
-  [/mariadb/, "mariadb"],
-  [/mysql/, "mysql"],
-  [/elasticsearch/, "elasticsearch"],
-  [/kibana/, "kibana"],
-  [/minio/, "minio"],
-  [/vault/, "vault"],
-  [/keycloak/, "keycloak"],
-  [/clickhouse/, "clickhouse"],
-  [/temporal/, "temporal"],
-  [/sentry/, "sentry"],
-  [/n8n/, "n8n"],
-  [/metabase/, "metabase"],
-  [/nats/, "natsdotio"],
-  [/kafka/, "apachekafka"],
-  [/qdrant/, "qdrant"],
-  [/meilisearch/, "meilisearch"],
-  [/opentelemetry|otel/, "opentelemetry"],
-  [/fluent-?bit/, "fluentbit"],
-  [/cilium/, "cilium"],
-  [/istio/, "istio"],
-  [/linkerd/, "linkerd"],
-  [/coredns|metrics-server|kube-proxy|registry\.k8s\.io|k8s\.gcr\.io|kubectl/, "kubernetes"],
-];
-
-const PROVIDER_ICONS: Record<string, string> = {
-  scaleway: "scaleway",
-  gce: "googlecloud",
-  hcloud: "hetzner",
-  ovhcloud: "ovh",
-  digitalocean: "digitalocean",
-  k3s: "k3s",
-  kind: "kubernetes",
-};
-
-// the repo part only: a tag like `:postgres-16` must not decide the logo
-const repoOf = (image: string) => image.replace(/@.*$/, "").replace(/:[^/]*$/, "").toLowerCase();
-
-export function imageIcon(images: string[]): string | null {
-  for (const img of images.map(repoOf)) for (const [re, slug] of IMAGE_ICONS) if (re.test(img)) return slug;
-  return null;
-}
-
-export const providerIcon = (provider: string | null) => (provider && PROVIDER_ICONS[provider]) ?? null;
 
 // a host older than this field sends no roles
 export const rolesOf = (n: Partial<Pick<NodeView, "roles">>) => n.roles ?? [];

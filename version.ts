@@ -1,4 +1,5 @@
 // Plugin release identity: Trame compares VERSION with the latest GitHub release of REPO.
+// src/mod.rs carries the same two constants; version_test.ts keeps them equal.
 export const VERSION = "0.1.0";
 export const REPO = "Getsoren/trame-k8s";
 

@@ -31,16 +31,27 @@ jobs:
         with:
           bun-version: "1.3.11"
 
+      - name: Rust toolchain (Trame's rust-toolchain.toml)
+        run: cd trame && rustup show active-toolchain
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: trame
+
       - name: Compose the plugin into Trame
         run: |
           echo '{ "plugins": ["../trame-k8s"] }' > trame/plugins.local.json
           cd trame && bun install --frozen-lockfile && (cd app/web && npm ci) && bun scripts/gen-plugins.ts
 
-      - name: Typecheck Trame with the plugin composed
-        run: cd trame && bunx tsc --noEmit -p . && cd app/web && npm run typecheck
-
-      - name: Lint and unit tests
+      - name: Backend under Trame's lints and unit tests
         run: |
+          cd trame
+          cargo clippy -p trame-local --all-targets --locked -- -D warnings
+          cargo test -p trame-local --locked --lib
+
+      - name: Web typecheck, lint and tests
+        run: |
+          (cd trame/app/web && npm run typecheck)
           cd trame-k8s
-          ../trame/node_modules/.bin/oxlint -c ../trame/.oxlintrc.json .
+          ../trame/node_modules/.bin/oxlint -c ../trame/.oxlintrc.json web
           bun test
