@@ -300,6 +300,7 @@ mod tests {
             restarts: 0,
             failed: false,
             logo_hint: None,
+            tech: vec![],
             logo: None,
             group_hint: None,
             group: None,

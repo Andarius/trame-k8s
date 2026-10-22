@@ -1,5 +1,6 @@
 // Snapshot → force-graph nodes and links for each graph view. Pure; Graph.tsx only draws.
 import { type ClusterView, type Health, health, isControlPlane, rolesOf, type Workload } from "../model.ts";
+import { quote } from "./search.ts";
 
 export type Ref =
   | { type: "cluster"; context: string }
@@ -63,6 +64,24 @@ const DRIFT = "var(--color-paused)";
 const HOT = "var(--color-copper)";
 const BUSY_NODE = 0.85;
 const CONTROL = "var(--color-chart-7)";
+
+// the search term a node stands for, added on double-click; a k8s node or pod has none
+export function filterTerm(n: Pick<GNode, "kind" | "id" | "ref">): string | null {
+  const r = n.ref;
+  if (n.kind === "host") return `host:${quote(n.id.slice(2))}`;
+  if (!r) return null;
+  switch (r.type) {
+    case "cluster": return `cluster:${quote(r.context)}`;
+    case "ns": return `ns:${quote(r.ns)}`;
+    case "group": return `group:${quote(r.group)}`;
+    case "workload": return `ns:${quote(r.ns)} ${quote(r.name)}`;
+    case "app": {
+      const [ns, name] = r.app.split("/");
+      return `ns:${quote(ns)} ${quote(name)}`;
+    }
+    default: return null;
+  }
+}
 
 export const workloadId = (w: Pick<Workload, "cluster" | "ns" | "name">) => `w:${w.cluster}/${w.ns}/${w.name}`;
 export const appKey = (w: Pick<Workload, "ns" | "name">) => `${w.ns}/${w.name}`;

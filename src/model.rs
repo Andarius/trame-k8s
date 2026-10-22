@@ -76,6 +76,7 @@ pub struct Workload {
     pub restarts: i64,
     pub failed: bool,
     pub logo_hint: Option<String>,
+    pub tech: Vec<String>, // the tool it runs and its kinds, for `tech:`
     pub logo: Option<String>,
     pub group_hint: Option<String>,
     pub group: Option<String>,
@@ -197,6 +198,57 @@ pub fn image_icon(images: &[String]) -> Option<&'static str> {
     })
 }
 
+// simple-icons slug → what kind of tech it is, for `tech:db` and the like
+const TECH_KINDS: &[(&str, &[&str])] = &[
+    ("postgresql", &["db", "sql"]),
+    ("mysql", &["db", "sql"]),
+    ("mariadb", &["db", "sql"]),
+    ("clickhouse", &["db", "sql"]),
+    ("mongodb", &["db", "nosql"]),
+    ("redis", &["db", "cache"]),
+    ("elasticsearch", &["db", "search"]),
+    ("qdrant", &["db", "vector"]),
+    ("meilisearch", &["search"]),
+    ("minio", &["storage"]),
+    ("rabbitmq", &["queue"]),
+    ("natsdotio", &["queue"]),
+    ("apachekafka", &["queue"]),
+    ("grafana", &["monitoring"]),
+    ("prometheus", &["monitoring"]),
+    ("opentelemetry", &["monitoring"]),
+    ("fluentbit", &["monitoring"]),
+    ("sentry", &["monitoring"]),
+    ("kibana", &["monitoring"]),
+    ("nginx", &["proxy"]),
+    ("traefikproxy", &["proxy"]),
+    ("istio", &["mesh"]),
+    ("linkerd", &["mesh"]),
+    ("cilium", &["network"]),
+    ("argo", &["cd"]),
+    ("vault", &["security"]),
+    ("keycloak", &["security", "auth"]),
+    ("letsencrypt", &["security"]),
+    ("temporal", &["workflow"]),
+    ("n8n", &["workflow"]),
+    ("metabase", &["bi"]),
+    ("kubernetes", &["k8s"]),
+];
+
+// the tool a workload runs (its annotation, else a guess from its images), then its kinds
+pub fn tech_of(logo_hint: Option<&str>, images: &[String]) -> Vec<String> {
+    let Some(slug) = logo_hint.or_else(|| image_icon(images)) else {
+        return Vec::new();
+    };
+    let kinds = TECH_KINDS
+        .iter()
+        .find(|(s, _)| *s == slug)
+        .map_or(&[][..], |(_, k)| k);
+    std::iter::once(slug)
+        .chain(kinds.iter().copied())
+        .map(str::to_owned)
+        .collect()
+}
+
 pub fn provider_icon(provider: Option<&str>) -> Option<&'static str> {
     Some(match provider? {
         "scaleway" => "scaleway",
@@ -251,6 +303,23 @@ mod tests {
             ("ghcr.io/x/pg@sha256:abc", "ghcr.io/x/pg"),
         ] {
             assert_eq!(repo_of(image), want, "{image}");
+        }
+    }
+
+    #[test]
+    fn tech_of_prefers_the_annotation_then_adds_kinds() {
+        let images = |i: &str| vec![i.to_owned()];
+        for (hint, image, want) in [
+            (
+                None,
+                "bitnami/postgresql:16",
+                vec!["postgresql", "db", "sql"],
+            ),
+            (Some("rabbitmq"), "redis:7", vec!["rabbitmq", "queue"]),
+            (Some("custom"), "redis:7", vec!["custom"]),
+            (None, "reg/api:v1", vec![]),
+        ] {
+            assert_eq!(tech_of(hint, &images(image)), want, "{image}");
         }
     }
 

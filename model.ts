@@ -34,6 +34,7 @@ export type Workload = {
   restarts: number;
   failed: boolean; // CronJob only: last job failed
   logoHint: string | null; // `trame.dev/logo` annotation (a simple-icons slug)
+  tech: string[]; // the tool it runs (annotation or image guess), then its kinds: postgresql, db, sql
   logo: string | null; // resolved URL, filled per /state request
   groupHint: string | null; // `trame.dev/group` annotation
   group: string | null; // resolved per /state request

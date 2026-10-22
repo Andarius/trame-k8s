@@ -1,7 +1,7 @@
 // GitHub-like search over workloads: free words plus `field:value` qualifiers, `-` to negate.
 import { type Health, health, type Workload } from "../model.ts";
 
-export const QUALIFIERS = ["cluster", "ns", "group", "kind", "image", "host", "is"] as const;
+export const QUALIFIERS = ["cluster", "ns", "group", "kind", "image", "host", "tech", "is"] as const;
 export type Qualifier = (typeof QUALIFIERS)[number];
 
 export type Term = { field: Qualifier | null; value: string; not: boolean };
@@ -32,6 +32,7 @@ function hits(w: Workload, t: Term, now: number): boolean {
     case "kind": return has(w.kind);
     case "image": return has(...w.images);
     case "host": return has(...w.hosts);
+    case "tech": return w.tech.some((x) => x.startsWith(t.value));
     case "is": return health(w, now) === (IS_ALIAS[t.value] ?? t.value);
     default: return has(w.name, w.ns, w.cluster, w.group ?? "", ...w.images, ...w.hosts);
   }
@@ -46,6 +47,7 @@ export const QUALIFIER_HELP: Record<Qualifier, string> = {
   kind: "Deployment, StatefulSet, DaemonSet, CronJob",
   image: "image name or tag",
   host: "ingress or route host",
+  tech: "postgresql, redis… or db, cache, queue, monitoring…",
   is: "ready, rolled, degraded, down, zero",
 };
 export const IS_VALUES = ["ready", "rolled", "degraded", "down", "zero"];
@@ -53,9 +55,9 @@ export const IS_VALUES = ["ready", "rolled", "degraded", "down", "zero"];
 export type Values = (field: Qualifier) => string[];
 export type Completion = { items: string[]; replace: (item: string) => string };
 
-const quote = (v: string) => (/\s/.test(v) ? `"${v}"` : v);
+export const quote = (v: string) => (/\s/.test(v) ? `"${v}"` : v);
 
-// completions for the word being typed: qualifiers, then a qualifier's values; `replace` is the text once one is picked
+// completions for the word being typed, every qualifier in an empty box: qualifiers, then a qualifier's values; `replace` is the text once one is picked
 export function complete(text: string, values: Values, limit = 8): Completion {
   const m = text.match(/(-?)([^\s"]*)$/)!;
   const head = text.slice(0, m.index! + m[1].length);
@@ -67,7 +69,8 @@ export function complete(text: string, values: Values, limit = 8): Completion {
     const items = [...new Set(values(field))].filter((v) => v.toLowerCase().includes(partial) && v.toLowerCase() !== partial).slice(0, limit);
     return { items, replace: (v) => `${head}${field}:${quote(v)} ` };
   }
-  const items = word && colon < 0 ? QUALIFIERS.filter((q) => q.startsWith(word) && q !== word).map((q) => `${q}:`) : [];
+  // an empty box lists every qualifier, so they can be discovered
+  const items = colon < 0 && (word || !text.trim()) ? QUALIFIERS.filter((q) => q.startsWith(word) && q !== word).map((q) => `${q}:`) : [];
   return { items, replace: (q) => `${head}${q}` };
 }
 

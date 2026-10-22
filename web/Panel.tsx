@@ -68,6 +68,8 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
   const group = onlyGroup && groups.includes(onlyGroup) ? onlyGroup : null;
   const clusters = useMemo(() => snap?.clusters.filter((c) => !hidden.includes(c.context)) ?? [], [snap, hidden]);
   const terms = useMemo(() => parseQuery(query), [query]);
+  // a graph node double-clicked: its term joins the query once
+  const addTerm = (term: string) => setQuery((q) => (q.split(/\s+/).join(" ").includes(term) ? q : `${q.trim()} ${term}`.trim()));
   // what the search can complete a qualifier with, from everything polled
   const values = useMemo(() => {
     const by: Record<Qualifier, string[]> = {
@@ -77,6 +79,7 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
       kind: all.map((w) => w.kind),
       image: all.flatMap((w) => w.images.map((i) => i.replace(/@.*$/, "").replace(/:[^/:]+$/, ""))),
       host: all.flatMap((w) => w.hosts),
+      tech: all.flatMap((w) => w.tech),
       is: IS_VALUES,
     };
     return (field: Qualifier) => [...new Set(by[field])].sort();
@@ -205,15 +208,18 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
           <button type="button" onClick={refresh} disabled={busy} className="rounded-md border border-line px-1.5 py-0.5 hover:border-chipline disabled:opacity-50" title="Poll the clusters now">
             {busy ? "…" : "↻"}
           </button>
-          <button type="button" onClick={onOpenSettings} className="rounded-md border border-line px-1.5 py-0.5 hover:border-chipline" title="Settings">
-            ⚙︎
+          <button type="button" onClick={onOpenSettings} className="rounded-md border border-line px-1.5 py-[3px] text-ink-soft hover:border-chipline hover:text-ink" title="Settings">
+            {/* lucide sliders-horizontal: the ⚙︎ glyph renders as an emoji on some fonts */}
+            <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
+              <path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4" />
+            </svg>
           </button>
         </span>
       </div>
       <div className="relative min-h-0 flex-1">
         {view === "columns"
           ? <Columns clusters={clusters} workloads={shown} onSelect={setSelected} />
-          : <Graph graph={graph!} viewKey={`${view}:${layout}`} layout={layout} onSelect={setSelected} />}
+          : <Graph graph={graph!} viewKey={`${view}:${layout}`} layout={layout} onSelect={setSelected} onFilter={addTerm} />}
         {view !== "columns" && (
           <div className={`absolute top-2.5 z-10 ${selected ? "right-[340px]" : "right-4"}`} title="Graph layout">
             <Select
@@ -248,7 +254,7 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
             <span className="tabular-nums text-ink-muted/80">{healthCount[h] ?? 0}</span>
           </button>
         ))}
-        {view !== "columns" && <span className="whitespace-nowrap">scroll to zoom · drag · click to peek</span>}
+        {view !== "columns" && <span className="whitespace-nowrap">scroll to zoom · drag · click to peek · double-click to filter</span>}
         <span className="ml-auto whitespace-nowrap">{shown.length} workloads</span>
       </div>
     </div>

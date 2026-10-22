@@ -13,7 +13,7 @@ import {
 } from "d3-force";
 import { select } from "d3-selection";
 import { zoom, zoomIdentity, zoomTransform, type ZoomTransform } from "d3-zoom";
-import type { GLink, GNode, GraphData, Ref } from "./graph-model.ts";
+import { filterTerm, type GLink, type GNode, type GraphData, type Ref } from "./graph-model.ts";
 
 type Node = GNode & SimulationNodeDatum & { side?: Side };
 type Link = Omit<GLink, "source" | "target"> & SimulationLinkDatum<Node> & { source: Node; target: Node };
@@ -135,16 +135,19 @@ function forceRings(nodes: Node[], links: Link[], ring: number) {
 // positions survive polls and view switches, so a refresh doesn't reshuffle the graph
 const placed = new Map<string, { x: number; y: number }>();
 
-export default function Graph({ graph, viewKey, layout, onSelect }: {
+export default function Graph({ graph, viewKey, layout, onSelect, onFilter }: {
   graph: GraphData;
   viewKey: string;
   layout: Layout;
   onSelect: (ref: Ref) => void;
+  onFilter: (term: string) => void;
 }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [tip, setTip] = useState<{ lines: string[]; x: number; y: number } | null>(null);
   const select$ = useRef(onSelect);
   select$.current = onSelect;
+  const filter$ = useRef(onFilter);
+  filter$.current = onFilter;
 
   // rebuild only when what is drawn changes, not on every poll
   const shape = JSON.stringify([
@@ -322,6 +325,11 @@ export default function Graph({ graph, viewKey, layout, onSelect }: {
       .on("click", (e: MouseEvent, d) => {
         e.stopPropagation();
         if (d.ref) select$.current(d.ref);
+      })
+      .on("dblclick", (e: MouseEvent, d) => {
+        e.stopPropagation();
+        const term = filterTerm(d);
+        if (term) filter$.current(term);
       });
     showLabels();
     return () => {

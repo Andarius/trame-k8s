@@ -19,7 +19,7 @@ just dev       # or rebuild and restart your Trame build
 
 Enable it under Plugins and tick the contexts to poll. Nothing is polled until a context is ticked.
 
-The sidebar column beside the rail picks the clusters to show, a group, and whether system namespaces or only issues are shown. The toolbar holds the view and the search, which is GitHub-like: words match name, namespace, cluster, group, image and host; `cluster:`, `ns:`, `group:`, `kind:`, `image:`, `host:` and `is:` (`ready`, `rolled`, `degraded`, `down`, `zero`) narrow a field; `-` excludes; quote a value with spaces.
+The sidebar column beside the rail picks the clusters to show, a group, and whether system namespaces or only issues are shown. The toolbar holds the view and the search, which is GitHub-like: words match name, namespace, cluster, group, image and host; `cluster:`, `ns:`, `group:`, `kind:`, `image:`, `host:`, `tech:` (a tool like `postgresql`, or a kind like `db`, `cache`, `queue`, `monitoring`) and `is:` (`ready`, `rolled`, `degraded`, `down`, `zero`) narrow a field; `-` excludes; quote a value with spaces. Focusing the empty box lists every qualifier, and a qualifier lists its values. Double-clicking a graph node adds it to the search.
 
 The backend runs `kubectl --context=<ctx> get … -A -o json` per context, from the Trame process (30 s timeout per call). It uses your kubeconfig and is read-only. Gateway API `HTTPRoute`s are read when the CRD exists.
 

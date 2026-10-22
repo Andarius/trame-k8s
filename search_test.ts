@@ -7,7 +7,7 @@ const NOW = Date.parse("2026-10-20T12:00:00Z");
 const w = (over: Partial<Workload>): Workload => ({
   cluster: "saas-prod", ns: "langfuse", name: "langfuse-web", kind: "Deployment", desired: 2, ready: 2, images: ["ghcr.io/langfuse/web:4.15.0"],
   rolledAt: "2026-10-19T12:00:00Z", services: [], hosts: ["langfuse.example.com"], deps: [], pods: [], reason: null, restarts: 0,
-  failed: false, logoHint: null, logo: null, groupHint: null, group: "ai", ...over,
+  failed: false, logoHint: null, tech: [], logo: null, groupHint: null, group: "ai", ...over,
 });
 
 test.each([
@@ -31,6 +31,9 @@ test.each([
   { id: "kind", q: "kind:cron", over: { kind: "CronJob" }, want: true },
   { id: "image", q: "image:4.15", over: {}, want: true },
   { id: "host", q: "host:example", over: {}, want: true },
+  { id: "tech by tool prefix", q: "tech:postgres", over: { tech: ["postgresql", "db", "sql"] }, want: true },
+  { id: "tech by kind", q: "tech:db", over: { tech: ["redis", "db", "cache"] }, want: true },
+  { id: "tech miss", q: "tech:db", over: { tech: ["nginx", "proxy"] }, want: false },
   { id: "is:ready", q: "is:ready", over: {}, want: true },
   { id: "is:down", q: "is:down", over: { ready: 0 }, want: true },
   { id: "is:degraded alias", q: "is:degraded", over: { ready: 1 }, want: true },
@@ -47,7 +50,8 @@ test.each([
   { id: "negation kept, value with spaces quoted", text: "-ns:ai", items: ["ai kit"], pick: "ai kit", want: '-ns:"ai kit" ' },
   { id: "complete value offers nothing", text: "is:ready", items: [], pick: null, want: null },
   { id: "unknown field offers nothing", text: "foo:ba", items: [], pick: null, want: null },
-  { id: "nothing on a blank", text: "web ", items: [], pick: null, want: null },
+  { id: "nothing on a blank after words", text: "web ", items: [], pick: null, want: null },
+  { id: "every qualifier in an empty box", text: "", items: ["cluster:", "ns:", "group:", "kind:", "image:", "host:", "tech:", "is:"], pick: "group:", want: "group:" },
 ])("complete: $id", ({ text, items, pick, want }) => {
   const c = complete(text, VALUES as never);
   expect(c.items).toEqual(items);
