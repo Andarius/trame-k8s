@@ -32,3 +32,7 @@ The backend runs `kubectl --context=<ctx> get … -A -o json` per context on the
 ```bash
 bun test
 ```
+
+## Release
+
+Bump `VERSION` in `version.ts`, merge, then push a matching tag (`git tag v0.2.0 && git push origin v0.2.0`). The release workflow refuses a tag that differs from `VERSION` and publishes a GitHub release with generated notes; Trame then shows "Update available" for older installs.
