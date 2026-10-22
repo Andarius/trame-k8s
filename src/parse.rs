@@ -1,5 +1,7 @@
 // `kubectl get … -A -o json` List items → one cluster's workloads, nodes and their relations.
-use super::model::{Capacity, ClusterView, Kind, NodeView, PodView, ServiceView, Usage, Workload};
+use super::model::{
+    Capacity, ClusterView, Kind, NodeView, PodView, ServiceView, Usage, Workload, tech_of,
+};
 use regex::Regex;
 use serde_json::Value;
 use std::collections::{BTreeSet, HashMap};
@@ -372,6 +374,8 @@ pub fn parse_cluster(context: &str, items: &[Value], polled_at: &str) -> Cluster
             }
         }
         let annotation = |k: &str| text(&item["metadata"]["annotations"][k]).map(str::to_owned);
+        let logo_hint = annotation(LOGO_ANNOTATION);
+        let tech = tech_of(logo_hint.as_deref(), &images);
         workloads.push(Workload {
             cluster: context.to_owned(),
             ns: ns.to_owned(),
@@ -392,7 +396,8 @@ pub fn parse_cluster(context: &str, items: &[Value], polled_at: &str) -> Cluster
             restarts: views.iter().map(|p| p.restarts).sum(),
             pods: views,
             failed,
-            logo_hint: annotation(LOGO_ANNOTATION),
+            logo_hint,
+            tech,
             logo: None,
             group_hint: annotation(GROUP_ANNOTATION),
             group: None,

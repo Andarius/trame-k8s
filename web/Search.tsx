@@ -3,7 +3,7 @@ import { useMemo, useRef, useState } from "react";
 import { complete, QUALIFIER_HELP, type Qualifier, tokenize, type Values } from "./search.ts";
 
 const TOKEN_CLASS = { key: "text-copper", neg: "text-blocked", value: "text-ink", word: "text-ink", space: "" } as const;
-const TEXT = "px-2 py-0.5 text-[12px] whitespace-pre";
+const TEXT = "px-2.5 py-0.5 text-[13px] whitespace-pre";
 
 export default function Search({ value, onChange, values }: { value: string; onChange: (v: string) => void; values: Values }) {
   const [open, setOpen] = useState(false);
@@ -40,12 +40,12 @@ export default function Search({ value, onChange, values }: { value: string; onC
           else return;
           e.preventDefault();
         }}
-        placeholder="⌕ search · cluster: ns: group: kind: image: host: is:down · -ns:…"
-        title="Words match name, namespace, cluster, group, image and host. Qualifiers: cluster: ns: group: kind: image: host: is:(ready|rolled|degraded|down|zero). Prefix - to exclude, quote values with spaces."
+        placeholder="⌕ search · ns: group: tech:db is:down · -ns:… · focus to list all"
+        title="Words match name, namespace, cluster, group, image and host. Qualifiers: cluster: ns: group: kind: image: host: tech:(postgresql, redis… or db, cache, queue…) is:(ready|rolled|degraded|down|zero). Double-click a graph node to add it. Prefix - to exclude, quote values with spaces."
         className={`relative w-full rounded-md border border-chipline bg-transparent text-transparent caret-ink outline-none placeholder:text-ink-muted focus:border-copper ${TEXT}`}
       />
       {shown && (
-        <ul className="absolute left-0 top-full z-30 mt-1 max-h-[280px] min-w-[220px] overflow-y-auto rounded-md border border-overlay-border bg-panel-modal py-1 shadow-lg">
+        <ul className="absolute left-0 top-full z-30 mt-1 max-h-[360px] min-w-[320px] overflow-y-auto rounded-md border border-overlay-border bg-panel-modal py-1 shadow-lg">
           {items.map((it, i) => {
             const q = it.endsWith(":") ? (it.slice(0, -1) as Qualifier) : null;
             return (
@@ -58,10 +58,10 @@ export default function Search({ value, onChange, values }: { value: string; onC
                     pick(i);
                   }}
                   onMouseEnter={() => setIdx(i)}
-                  className={`flex w-full items-center gap-3 px-2.5 py-1 text-left text-[12px] ${i === idx ? "bg-active-row text-ink" : "text-ink-soft"}`}
+                  className={`flex w-full items-center gap-3 px-2.5 py-1 text-left text-[12.5px] ${i === idx ? "bg-active-row text-ink" : "text-ink-soft"}`}
                 >
                   <span className="font-mono">{it}</span>
-                  {q && <span className="ml-auto truncate text-[10.5px] text-ink-muted">{QUALIFIER_HELP[q]}</span>}
+                  {q && <span className="ml-auto truncate text-[11px] text-ink-muted">{QUALIFIER_HELP[q]}</span>}
                 </button>
               </li>
             );
