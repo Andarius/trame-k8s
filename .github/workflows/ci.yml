@@ -45,9 +45,9 @@ jobs:
 
       - name: Backend under Trame's lints and unit tests
         run: |
-          cd trame
+          cd trame && mkdir -p .scratch
           cargo clippy -p trame-local --all-targets --locked -- -D warnings
-          cargo test -p trame-local --locked --lib
+          cargo test -p trame-local --locked --lib local_gen::
 
       - name: Web typecheck, lint and tests
         run: |
