@@ -1,0 +1,19 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "allowImportingTsExtensions": true,
+    "types": ["bun"],
+    "typeRoots": ["../trame/node_modules/@types"],
+    "paths": {
+      "@trame/web-api": ["../trame/app/web/src/plugin-api.ts"]
+    }
+  },
+  "include": ["*.ts", "web", "e2e", "../trame/types.d.ts"]
+}

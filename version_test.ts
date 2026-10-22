@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { tagMismatch } from "./version.ts";
+import { readFileSync } from "node:fs";
+import { REPO, tagMismatch, VERSION } from "./version.ts";
 
 // the release workflow refuses a tag that would publish a release under the wrong version
 test.each([
@@ -11,4 +12,10 @@ test.each([
   { id: "empty tag", tag: "", ok: false },
 ])("$id", ({ tag, ok }) => {
   expect(tagMismatch(tag, "0.1.0") === null).toBe(ok);
+});
+
+test("src/mod.rs carries the same version and repo", () => {
+  const rs = readFileSync(new URL("./src/mod.rs", import.meta.url), "utf8");
+  expect(rs).toContain(`const VERSION: &str = "${VERSION}";`);
+  expect(rs).toContain(`const REPO: &str = "${REPO}";`);
 });
