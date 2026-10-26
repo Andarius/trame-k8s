@@ -1,27 +1,15 @@
 // A pattern field completing from the polled workloads: `ns/*`, then `ns/name`, for the item being typed.
 import { type KeyboardEvent, useMemo, useState } from "react";
+import { MenuRow, Popover, TextInput } from "@trame/web-api";
 import type { Workload } from "../model.ts";
-
-const LIMIT = 8;
-
-// candidates for the last comma-separated item, and the text once one is picked
-export function completePattern(text: string, workloads: Workload[]): { items: string[]; replace: (item: string) => string } {
-  const at = text.lastIndexOf(",");
-  const head = at < 0 ? "" : text.slice(0, at + 1) + " ";
-  const word = text.slice(at + 1).trim().toLowerCase();
-  if (!word) return { items: [], replace: (v) => `${head}${v}` };
-  const ns = [...new Set(workloads.map((w) => w.ns))].sort().map((n) => `${n}/*`);
-  const apps = [...new Set(workloads.map((w) => `${w.ns}/${w.name}`))].sort();
-  const items = [...ns, ...apps].filter((c) => c.toLowerCase().includes(word) && c.toLowerCase() !== word).slice(0, LIMIT);
-  return { items, replace: (v) => `${head}${v}` };
-}
+import { completePattern } from "./patterns.ts";
 
 export default function PatternInput({ value, onChange, workloads, onKeyDown, className, placeholder, autoFocus }: {
   value: string;
   onChange: (v: string) => void;
   workloads: Workload[];
   onKeyDown?: (e: KeyboardEvent<HTMLInputElement>) => void;
-  className: string;
+  className?: string;
   placeholder?: string;
   autoFocus?: boolean;
 }) {
@@ -35,7 +23,8 @@ export default function PatternInput({ value, onChange, workloads, onKeyDown, cl
   };
   return (
     <div className="relative min-w-0">
-      <input
+      <TextInput
+        mono
         value={value}
         autoFocus={autoFocus}
         onChange={(e) => {
@@ -50,7 +39,6 @@ export default function PatternInput({ value, onChange, workloads, onKeyDown, cl
           if (e.key === "ArrowDown") setIdx((i) => (i + 1) % items.length);
           else if (e.key === "ArrowUp") setIdx((i) => (i + items.length - 1) % items.length);
           else if (e.key === "Tab" || e.key === "Enter") pick(idx);
-          else if (e.key === "Escape") setOpen(false);
           else return onKeyDown?.(e);
           e.preventDefault();
         }}
@@ -58,23 +46,25 @@ export default function PatternInput({ value, onChange, workloads, onKeyDown, cl
         className={className}
       />
       {shown && (
-        <ul className="absolute left-0 top-full z-30 mt-1 max-h-[240px] min-w-full overflow-y-auto rounded-md border border-overlay-border bg-panel-modal py-1 shadow-lg">
+        // portalled: a Modal's scrolling body would clip it
+        <Popover portal onClose={() => setOpen(false)} className="max-h-[240px] overflow-y-auto">
           {items.map((it, i) => (
-            <li key={it}>
-              <button
-                type="button"
-                onMouseDown={(e) => {
-                  e.preventDefault();
-                  pick(i);
-                }}
-                onMouseEnter={() => setIdx(i)}
-                className={`w-full px-2.5 py-1 text-left font-mono text-[12px] ${i === idx ? "bg-active-row text-ink" : "text-ink-soft"}`}
-              >
-                {it}
-              </button>
-            </li>
+            <MenuRow
+              key={it}
+              dense
+              active={i === idx}
+              // mousedown, so the input keeps focus and its blur does not close the list first
+              onMouseDown={(e) => {
+                e.preventDefault();
+                pick(i);
+              }}
+              onMouseEnter={() => setIdx(i)}
+              className={`font-mono ${i === idx ? "bg-panel" : ""}`}
+            >
+              {it}
+            </MenuRow>
           ))}
-        </ul>
+        </Popover>
       )}
     </div>
   );

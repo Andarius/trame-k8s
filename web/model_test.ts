@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { type Health, health, type Workload } from "./model.ts";
-import { buildGraph, driftOf, filterTerm, type GNode } from "./web/graph-model.ts";
+import { type Health, health, type Workload } from "../model.ts";
+import { buildGraph, driftOf, filterTerm, type GNode } from "./graph-model.ts";
 
 const NOW = Date.parse("2026-10-20T12:00:00Z");
 const w = (over: Partial<Workload>): Workload => ({

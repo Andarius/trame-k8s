@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test";
-import type { Workload } from "./model.ts";
-import { complete, matches, parseQuery, tokenize } from "./web/search.ts";
-import { completePattern } from "./web/PatternInput.tsx";
+import type { Workload } from "../model.ts";
+import { complete, matches, parseQuery, tokenize } from "./search.ts";
+import { completePattern } from "./patterns.ts";
 
 const NOW = Date.parse("2026-10-20T12:00:00Z");
 const w = (over: Partial<Workload>): Workload => ({
