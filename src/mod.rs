@@ -23,7 +23,7 @@ mod settings_slice;
 pub const ID: &str = "k8s";
 // keep in step with version.ts (version_test.ts checks it)
 const VERSION: &str = "0.2.0";
-const REPO: &str = "Getsoren/trame-k8s";
+const REPO: &str = "Andarius/trame-k8s";
 const ICON_CDN: &str = "https://cdn.simpleicons.org";
 const MAX_LOGO_BYTES: usize = 512 * 1024;
 
