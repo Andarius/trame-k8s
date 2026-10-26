@@ -1,6 +1,6 @@
 // The peek panel: whatever a click on a column row or a graph node points at.
 import { type ReactNode, useState } from "react";
-import { openInBrowser } from "@trame/web-api";
+import { ErrorNote, IconButton, openInBrowser } from "@trame/web-api";
 import { type ClusterView, health, type PodView, rolesOf, type Usage, type Workload } from "../model.ts";
 import { ago, appKey, driftOf, HEALTH_COLOR, HEALTH_LABEL, type Ref, tagOf } from "./graph-model.ts";
 
@@ -197,7 +197,7 @@ export default function Detail({ selected, clusters, workloads, onSelect, onClos
             {selected.type === "cluster" ? `${c.provider ?? "unknown provider"} · ${c.nodes.length} nodes · ` : `${c.context} · `}
             {own.length} workloads · polled {ago(c.polledAt)} ago
           </div>
-          {c.error && <div className="mt-2 break-words text-[11.5px] text-blocked">{c.error}</div>}
+          {c.error && <ErrorNote className="mt-2 break-words">{c.error}</ErrorNote>}
           {bad.length > 0 && (
             <>
               <Label>{`Unhealthy · ${bad.length}`}</Label>
@@ -266,7 +266,7 @@ export default function Detail({ selected, clusters, workloads, onSelect, onClos
   }
   return (
     <aside className="absolute bottom-2.5 right-2.5 top-2.5 z-20 w-[320px] max-w-[calc(100%-20px)] overflow-auto rounded-xl border border-overlay-border bg-panel-modal px-3.5 py-3">
-      <button type="button" onClick={onClose} className="absolute right-2.5 top-2 text-ink-muted hover:text-ink" title="Close">✕</button>
+      <IconButton tone="close" onClick={onClose} className="absolute right-2.5 top-2" title="Close">✕</IconButton>
       {body}
     </aside>
   );

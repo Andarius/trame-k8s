@@ -1,6 +1,6 @@
 // Kubernetes settings: which contexts to poll (nothing is polled until one is ticked), cadence, logos, groups.
 import { type ReactNode, useEffect, useState } from "react";
-import { getPluginSettings, savePluginSettings } from "@trame/web-api";
+import { Button, ErrorNote, FIELD_LABEL, getPluginSettings, IconButton, savePluginSettings, TextInput } from "@trame/web-api";
 import { SLUG_RE, type Workload } from "../model.ts";
 import { getState, listContexts, refreshState } from "./api.ts";
 import { Logo } from "./Detail.tsx";
@@ -17,8 +17,7 @@ type Slice = {
 };
 const DEFAULTS: Slice = { contexts: [], pollSeconds: 60, kubectl: "kubectl", autoLogos: true, logos: {}, groups: {} };
 
-const input = "rounded-md border border-line bg-panel px-2.5 py-1.5 text-[11.5px] text-ink outline-none focus:border-chipline";
-const label = "mb-1.5 mt-4 text-[10.5px] font-medium uppercase tracking-[0.8px] text-ink-muted/80";
+const label = `${FIELD_LABEL} mb-1.5 mt-4 block uppercase`;
 
 type Row = { key: string; value: string };
 const rowsOf = (o: Record<string, string | string[]>): Row[] =>
@@ -41,24 +40,23 @@ function Rows({ rows, onChange, keyHint, valueHint, extra, workloads, complete }
   complete: "key" | "value"; // which column holds patterns
 }) {
   const set = (i: number, patch: Partial<Row>) => onChange(rows.map((r, j) => (j === i ? { ...r, ...patch } : r)));
-  const cls = `${input} w-full font-mono`;
   return (
     <div className="flex flex-col gap-1">
       {rows.map((r, i) => (
         <div key={i} className="grid grid-cols-[minmax(120px,1fr)_minmax(140px,1.4fr)_minmax(0,1fr)_auto] items-center gap-1.5">
           {complete === "key"
-            ? <PatternInput value={r.key} onChange={(key) => set(i, { key })} workloads={workloads} placeholder={keyHint} className={cls} />
-            : <input value={r.key} onChange={(e) => set(i, { key: e.target.value })} placeholder={keyHint} className={cls} />}
+            ? <PatternInput value={r.key} onChange={(key) => set(i, { key })} workloads={workloads} placeholder={keyHint} />
+            : <TextInput mono value={r.key} onChange={(e) => set(i, { key: e.target.value })} placeholder={keyHint} />}
           {complete === "value"
-            ? <PatternInput value={r.value} onChange={(value) => set(i, { value })} workloads={workloads} placeholder={valueHint} className={cls} />
-            : <input value={r.value} onChange={(e) => set(i, { value: e.target.value })} placeholder={valueHint} className={cls} />}
+            ? <PatternInput value={r.value} onChange={(value) => set(i, { value })} workloads={workloads} placeholder={valueHint} />
+            : <TextInput mono value={r.value} onChange={(e) => set(i, { value: e.target.value })} placeholder={valueHint} />}
           <div className="flex min-w-0 items-center gap-1.5">{extra(r)}</div>
-          <button type="button" onClick={() => onChange(rows.filter((_, j) => j !== i))} title="Remove" className="px-1 text-ink-muted hover:text-blocked">✕</button>
+          <IconButton tone="danger" onClick={() => onChange(rows.filter((_, j) => j !== i))} title="Remove" className="px-1">✕</IconButton>
         </div>
       ))}
-      <button type="button" onClick={() => onChange([...rows, { key: "", value: "" }])} className="self-start rounded-md border border-line px-2 py-0.5 text-[11px] text-ink-muted hover:border-chipline">
+      <Button size="sm" onClick={() => onChange([...rows, { key: "", value: "" }])} className="self-start">
         + Add
-      </button>
+      </Button>
     </div>
   );
 }
@@ -127,7 +125,7 @@ export function K8sSettings() {
       <p className="mb-2 text-[11.5px] text-ink-muted">
         Read with <code>kubectl get</code> using your kubeconfig. Nothing is polled until a context is ticked.
       </p>
-      {contextError && <div className="mb-2 break-words text-[11.5px] text-blocked">{contextError}</div>}
+      {contextError && <ErrorNote className="mb-2 break-words">{contextError}</ErrorNote>}
       <div className="grid gap-1">
         {shown.map((ctx) => (
           <label key={ctx} className="flex cursor-pointer items-center gap-2">
@@ -137,28 +135,31 @@ export function K8sSettings() {
           </label>
         ))}
       </div>
-      <button type="button" onClick={() => void loadContexts()} className="mt-2 rounded-md border border-line px-2 py-0.5 text-[11px] text-ink-muted hover:border-chipline">
+      <Button size="sm" onClick={() => void loadContexts()} className="mt-2">
         ↻ Reload contexts
-      </button>
+      </Button>
 
       <div className={label}>Polling</div>
       <div className="flex flex-wrap items-center gap-2">
         <span>Every</span>
-        <input
-          type="number"
-          min={15}
-          max={3600}
-          defaultValue={slice.pollSeconds}
-          onBlur={(e) => void save({ pollSeconds: Number(e.target.value) })}
-          className={`${input} w-20`}
-        />
+        <div className="w-20">
+          <TextInput
+            type="number"
+            min={15}
+            max={3600}
+            defaultValue={slice.pollSeconds}
+            onBlur={(e) => void save({ pollSeconds: Number(e.target.value) })}
+          />
+        </div>
         <span>seconds, with</span>
-        <input
-          defaultValue={slice.kubectl}
-          onBlur={(e) => void save({ kubectl: e.target.value.trim() })}
-          className={`${input} w-56 font-mono`}
-          title="kubectl, or an absolute path when the app's PATH lacks it"
-        />
+        <div className="w-56">
+          <TextInput
+            mono
+            defaultValue={slice.kubectl}
+            onBlur={(e) => void save({ kubectl: e.target.value.trim() })}
+            title="kubectl, or an absolute path when the app's PATH lacks it"
+          />
+        </div>
       </div>
 
       <div className={label}>Logos</div>
@@ -186,9 +187,9 @@ export function K8sSettings() {
         )}
       />
       <div className="mt-1.5 flex items-center gap-2">
-        <button type="button" onClick={() => void saveLogos()} className="rounded-md bg-copper px-2.5 py-1 text-[11.5px] font-medium text-copper-ink">
+        <Button variant="primary" size="sm" onClick={() => void saveLogos()}>
           Save logos
-        </button>
+        </Button>
         {status && <span className="text-[11px] text-ink-muted">{status}</span>}
       </div>
 
@@ -208,9 +209,9 @@ export function K8sSettings() {
         extra={(r) => <Matches patterns={splitPatterns(r.value)} workloads={workloads} />}
       />
       <div className="mt-1.5 flex items-center gap-2">
-        <button type="button" onClick={() => void saveGroups()} className="rounded-md bg-copper px-2.5 py-1 text-[11.5px] font-medium text-copper-ink">
+        <Button variant="primary" size="sm" onClick={() => void saveGroups()}>
           Save groups
-        </button>
+        </Button>
         {groupStatus && <span className="text-[11px] text-ink-muted">{groupStatus}</span>}
       </div>
     </div>

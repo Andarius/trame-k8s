@@ -30,15 +30,15 @@ The backend runs `kubectl --context=<ctx> get … -A -o json` per context, from 
 
 ## Test
 
-From the Trame checkout, with the plugin composed:
+The plugin uses Trame's own gates. `TRAME` points at the Trame checkout (default `../trame`), with the plugin composed into it:
 
 ```bash
-cargo clippy -p trame-local --all-targets --locked -- -D warnings
-cargo test -p trame-local --locked --lib   # the Rust unit tests: parsing, settings, logos, groups
-(cd app/web && npm run typecheck)
+just hooks   # pre-commit runs `just lint`
+just lint    # rustfmt (Trame's rustfmt.toml), oxlint (Trame's .oxlintrc.json), bun tests (import boundary, version, search, graph)
+just check   # lint, then clippy, the Rust unit tests and the web typecheck from the Trame checkout
 ```
 
-In this repo, `bun test` runs the web-side tests, the import boundary check and the version check.
+The web side uses Trame's components (`Button`, `TextInput`, `IconButton`, `ErrorNote`, `Modal`, `MenuRow`, `Select`) from `@trame/web-api` rather than its own styles. Pure logic (`search.ts`, `graph-model.ts`, `patterns.ts`) imports nothing from Trame, so the bun tests run without it.
 
 ## Release
 

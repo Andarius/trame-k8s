@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# DESCRIPTION: Check formatting, lint and the bun tests before committing.
+# USAGE: Invoked by git pre-commit once `just hooks` has run; TRAME points at the Trame checkout (default ../trame).
+set -euo pipefail
+
+just lint

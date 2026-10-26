@@ -49,9 +49,12 @@ jobs:
           cargo clippy -p trame-local --all-targets --locked -- -D warnings
           cargo test -p trame-local --locked --lib local_gen::
 
-      - name: Web typecheck, lint and tests
+      - name: Formatting, lint and bun tests (just lint)
         run: |
-          (cd trame/app/web && npm run typecheck)
           cd trame-k8s
+          rustfmt --check src/mod.rs
           ../trame/node_modules/.bin/oxlint -c ../trame/.oxlintrc.json web
           bun test
+
+      - name: Web typecheck
+        run: cd trame/app/web && npm run typecheck

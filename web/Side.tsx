@@ -1,5 +1,6 @@
 // The sidebar column beside the rail: clusters to show, group, and the two toggles.
 import { type ReactNode, useState } from "react";
+import { Button, Modal, TextInput } from "@trame/web-api";
 import type { ClusterView, Workload } from "../model.ts";
 import { Logo } from "./Detail.tsx";
 import Matches from "./Matches.tsx";
@@ -49,8 +50,6 @@ export type SideProps = {
   workloads: Workload[]; // for the form's match preview
 };
 
-const INPUT = "w-full rounded-md border border-chipline bg-panel px-2.5 py-1.5 text-[12.5px] text-ink outline-none placeholder:text-ink-muted focus:border-copper";
-
 function AddGroup({ onAdd, onClose, workloads }: { onAdd: SideProps["onAddGroup"]; onClose: () => void; workloads: Workload[] }) {
   const [name, setName] = useState("");
   const [patterns, setPatterns] = useState("");
@@ -62,41 +61,32 @@ function AddGroup({ onAdd, onClose, workloads }: { onAdd: SideProps["onAddGroup"
     if (dropped.length) setNote(`Ignored: ${dropped.join(", ")}`);
     else onClose();
   };
+  // Escape and Ctrl+Enter are the Modal's
   const keys = (e: React.KeyboardEvent) => {
     if (e.key === "Enter") void submit();
-    else if (e.key === "Escape") onClose();
   };
   return (
-    // a fixed overlay from inside the sidebar: the plugin cannot portal, and the host's Modal is not in its API
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/45 pt-[16vh]" onClick={onClose}>
-      <div
-        role="dialog"
-        aria-label="New group"
-        className="flex w-[400px] flex-col gap-2.5 rounded-xl border border-overlay-border bg-panel-modal p-5 shadow-2xl shadow-black/50"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="text-[14px] font-semibold text-ink">New group</div>
-        <p className="text-[11.5px] text-ink-muted">
-          Patterns are shaped like <code>name</code>, <code>ns/name</code> or <code>context/ns/name</code>; <code>*</code> matches within a segment.
-          The first matching group wins.
-        </p>
-        <input autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={keys} placeholder="name" className={INPUT} />
-        <PatternInput
-          value={patterns}
-          onChange={setPatterns}
-          workloads={workloads}
-          onKeyDown={keys}
-          placeholder="patterns: ns/*, name, ctx/ns/name"
-          className={`${INPUT} font-mono`}
-        />
-        <Matches patterns={ps} workloads={workloads} />
-        <div className="mt-1 flex items-center gap-2">
-          {note && <span className="min-w-0 truncate text-[11px] text-ink-muted" title={note}>{note}</span>}
-          <button type="button" onClick={onClose} className="ml-auto rounded-md px-2.5 py-1 text-[12px] text-ink-muted hover:text-ink">Cancel</button>
-          <button type="button" onClick={() => void submit()} className="rounded-md bg-copper px-3 py-1 text-[12px] font-medium text-copper-ink">Add</button>
-        </div>
+    <Modal width={400} label="New group" onClose={onClose} onSubmit={() => void submit()}>
+      <div className="text-[14px] font-semibold text-ink">New group</div>
+      <p className="text-[11.5px] text-ink-muted">
+        Patterns are shaped like <code>name</code>, <code>ns/name</code> or <code>context/ns/name</code>; <code>*</code> matches within a segment.
+        The first matching group wins.
+      </p>
+      <TextInput autoFocus value={name} onChange={(e) => setName(e.target.value)} onKeyDown={keys} placeholder="name" />
+      <PatternInput
+        value={patterns}
+        onChange={setPatterns}
+        workloads={workloads}
+        onKeyDown={keys}
+        placeholder="patterns: ns/*, name, ctx/ns/name"
+      />
+      <Matches patterns={ps} workloads={workloads} />
+      <div className="mt-1 flex items-center gap-2">
+        {note && <span className="min-w-0 truncate text-[11px] text-ink-muted" title={note}>{note}</span>}
+        <Button variant="ghost" onClick={onClose} className="ml-auto">Cancel</Button>
+        <Button variant="primary" onClick={() => void submit()}>Add</Button>
       </div>
-    </div>
+    </Modal>
   );
 }
 

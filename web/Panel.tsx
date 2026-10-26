@@ -1,7 +1,7 @@
 // Kubernetes panel: the polled snapshot as cluster columns or one of four graphs.
 // The backend poller owns freshness; this view re-reads the in-memory snapshot.
 import { useEffect, useMemo, useState } from "react";
-import { type PanelProps, Select, SidebarColumn, timeAgo } from "@trame/web-api";
+import { Button, ErrorNote, type PanelProps, Select, SidebarColumn, timeAgo } from "@trame/web-api";
 import { type Health, health, isSystem, type Snapshot, unhealthy } from "../model.ts";
 import { IS_VALUES, matches, parseQuery, type Qualifier } from "./search.ts";
 import Search from "./Search.tsx";
@@ -103,16 +103,18 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
   const graph = useMemo(() => (view === "columns" ? null : buildGraph(view, clusters, shown)), [view, clusters, shown]);
 
   if (!snap) {
-    return <div className="p-4 text-[12px] text-ink-muted">{error ? `Cannot reach the plugin: ${error}` : "Loading…"}</div>;
+    return error
+      ? <ErrorNote className="m-4">Cannot reach the plugin: {error}</ErrorNote>
+      : <div className="p-4 text-[12px] text-ink-muted">Loading…</div>;
   }
   if (!snap.configured) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-[12.5px] text-ink-muted">
         <span className="text-[22px] text-copper">⎈</span>
         <span>No kube context selected yet.</span>
-        <button type="button" onClick={onOpenSettings} className="rounded-md bg-copper px-3 py-1 text-[12px] font-medium text-copper-ink">
+        <Button variant="primary" onClick={onOpenSettings}>
           Choose contexts
-        </button>
+        </Button>
       </div>
     );
   }
@@ -205,15 +207,15 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
         <Search value={query} onChange={setQuery} values={values} />
         <span className="ml-auto flex items-center gap-1.5 text-[10.5px] text-ink-muted">
           {snap.polledAt && <span>{timeAgo(snap.polledAt)}</span>}
-          <button type="button" onClick={refresh} disabled={busy} className="rounded-md border border-line px-1.5 py-0.5 hover:border-chipline disabled:opacity-50" title="Poll the clusters now">
+          <Button size="sm" onClick={refresh} disabled={busy} title="Poll the clusters now">
             {busy ? "…" : "↻"}
-          </button>
-          <button type="button" onClick={onOpenSettings} className="rounded-md border border-line px-1.5 py-[3px] text-ink-soft hover:border-chipline hover:text-ink" title="Settings">
+          </Button>
+          <Button size="sm" onClick={onOpenSettings} title="Settings">
             {/* lucide sliders-horizontal: the ⚙︎ glyph renders as an emoji on some fonts */}
             <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden>
               <path d="M21 4h-7M10 4H3M21 12h-9M8 12H3M21 20h-5M12 20H3M14 2v4M8 10v4M16 18v4" />
             </svg>
-          </button>
+          </Button>
         </span>
       </div>
       <div className="relative min-h-0 flex-1">

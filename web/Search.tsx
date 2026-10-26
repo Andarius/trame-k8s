@@ -1,5 +1,6 @@
 // The search box with its completion list: Tab or Enter picks, arrows move, Escape closes.
 import { useMemo, useRef, useState } from "react";
+import { MenuRow } from "@trame/web-api";
 import { complete, QUALIFIER_HELP, type Qualifier, tokenize, type Values } from "./search.ts";
 
 const TOKEN_CLASS = { key: "text-copper", neg: "text-blocked", value: "text-ink", word: "text-ink", space: "" } as const;
@@ -45,28 +46,27 @@ export default function Search({ value, onChange, values }: { value: string; onC
         className={`relative w-full rounded-md border border-chipline bg-transparent text-transparent caret-ink outline-none placeholder:text-ink-muted focus:border-copper ${TEXT}`}
       />
       {shown && (
-        <ul className="absolute left-0 top-full z-30 mt-1 max-h-[360px] min-w-[320px] overflow-y-auto rounded-md border border-overlay-border bg-panel-modal py-1 shadow-lg">
+        <div className="absolute left-0 top-full z-30 mt-1 max-h-[360px] min-w-[320px] overflow-y-auto rounded-md border border-overlay-border bg-panel-modal p-1 shadow-lg">
           {items.map((it, i) => {
             const q = it.endsWith(":") ? (it.slice(0, -1) as Qualifier) : null;
             return (
-              <li key={it}>
-                <button
-                  type="button"
-                  // mousedown, so the input keeps focus and its blur does not close the list first
-                  onMouseDown={(e) => {
-                    e.preventDefault();
-                    pick(i);
-                  }}
-                  onMouseEnter={() => setIdx(i)}
-                  className={`flex w-full items-center gap-3 px-2.5 py-1 text-left text-[12.5px] ${i === idx ? "bg-active-row text-ink" : "text-ink-soft"}`}
-                >
-                  <span className="font-mono">{it}</span>
-                  {q && <span className="ml-auto truncate text-[11px] text-ink-muted">{QUALIFIER_HELP[q]}</span>}
-                </button>
-              </li>
+              <MenuRow
+                key={it}
+                active={i === idx}
+                // mousedown, so the input keeps focus and its blur does not close the list first
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  pick(i);
+                }}
+                onMouseEnter={() => setIdx(i)}
+                className={`gap-3 ${i === idx ? "bg-panel" : ""}`}
+              >
+                <span className="font-mono">{it}</span>
+                {q && <span className="ml-auto truncate text-[11px] text-ink-muted">{QUALIFIER_HELP[q]}</span>}
+              </MenuRow>
             );
           })}
-        </ul>
+        </div>
       )}
     </div>
   );
