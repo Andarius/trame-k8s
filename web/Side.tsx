@@ -1,15 +1,17 @@
-// The sidebar column beside the rail: clusters to show, group, and the two toggles.
+// The sidebar column beside the rail: clusters (filed under their project) to show, group, and the two toggles.
 import { type ReactNode, useState } from "react";
-import { Button, Modal, TextInput } from "@trame/web-api";
+import { Button, EntityIcon, Modal, type Project, TextInput } from "@trame/web-api";
 import type { ClusterView, Workload } from "../model.ts";
 import { Logo } from "./Detail.tsx";
 import Matches from "./Matches.tsx";
 import PatternInput from "./PatternInput.tsx";
 
+const PLUS = "ml-auto rounded px-1 text-[13px] leading-none text-ink-muted hover:bg-active-row hover:text-ink";
 const SECTION = "px-2 pb-1 pt-3 text-[10.5px] font-medium tracking-[0.8px] text-ink-muted/70";
 
-function Row({ active, dim, onClick, title, children, count }: {
+function Row({ active, dim, indent, onClick, title, children, count }: {
   active?: boolean;
+  indent?: boolean;
   dim?: boolean;
   onClick: () => void;
   title?: string;
@@ -21,7 +23,7 @@ function Row({ active, dim, onClick, title, children, count }: {
       type="button"
       onClick={onClick}
       title={title}
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] ${
+      className={`flex w-full items-center gap-2 rounded-md py-1.5 pr-2 text-left text-[13px] ${indent ? "pl-5" : "pl-2"} ${
         active ? "bg-active-row font-medium text-ink" : dim ? "text-ink-muted/60 line-through hover:text-ink-soft" : "text-ink-muted hover:text-ink-soft"
       }`}
     >
@@ -36,6 +38,8 @@ export type SideProps = {
   hidden: string[];
   onToggleCluster: (context: string) => void;
   clusterCount: (context: string) => number;
+  projectOf: (context: string) => Project | null;
+  onPickClusters: () => void;
   groups: string[];
   group: string | null;
   onGroup: (g: string | null) => void;
@@ -90,26 +94,64 @@ function AddGroup({ onAdd, onClose, workloads }: { onAdd: SideProps["onAddGroup"
   );
 }
 
+// clusters by project, projects by name, the unfiled last; the input itself when none is filed
+function byProject(clusters: ClusterView[], projectOf: SideProps["projectOf"]) {
+  if (!clusters.some((c) => projectOf(c.context))) return [{ project: null, clusters }];
+  const by = new Map<string | null, { project: Project | null; clusters: ClusterView[] }>();
+  for (const c of clusters) {
+    const project = projectOf(c.context);
+    const key = project?.id ?? null;
+    const entry = by.get(key) ?? { project, clusters: [] };
+    entry.clusters.push(c);
+    by.set(key, entry);
+  }
+  return [...by.values()].sort((a, b) =>
+    !a.project ? 1 : !b.project ? -1 : a.project.name.localeCompare(b.project.name)
+  );
+}
+
 export default function Side(p: SideProps) {
   const [adding, setAdding] = useState(false);
   return (
     <>
       <nav aria-label="Clusters" className="flex flex-col gap-0.5">
-        <div className={SECTION}>CLUSTERS</div>
-        {p.clusters.map((c) => {
-          const on = !p.hidden.includes(c.context);
+        <div className={`flex items-center ${SECTION}`}>
+          CLUSTERS
+          <button type="button" onClick={p.onPickClusters} title="Choose the kube contexts to poll and their projects" className={PLUS}>
+            +
+          </button>
+        </div>
+        {byProject(p.clusters, p.projectOf).map(({ project, clusters }) => {
+          // a header only once some cluster is filed under a project
+          const nested = clusters !== p.clusters;
           return (
-            <Row
-              key={c.context}
-              dim={!on}
-              onClick={() => p.onToggleCluster(c.context)}
-              title={c.error ?? (on ? "Hide this cluster" : "Show this cluster")}
-              count={on ? p.clusterCount(c.context) : undefined}
-            >
-              {c.logo ? <Logo src={c.logo} size={14} /> : <span className="w-[14px] text-center text-copper">⎈</span>}
-              <span className="min-w-0 flex-1 truncate">{c.context}</span>
-              {c.error && <span className="text-blocked">!</span>}
-            </Row>
+            <div key={project?.id ?? "__none"} className="flex flex-col gap-0.5">
+              {nested && (
+                <div className="flex items-center gap-2 px-2 pb-0.5 pt-1.5 text-[12px] font-medium text-ink-soft">
+                  {project?.icon
+                    ? <EntityIcon icon={project.icon} size={14} />
+                    : <span className="w-[14px] text-center text-ink-muted">{project ? "◎" : "◌"}</span>}
+                  <span className="min-w-0 flex-1 truncate">{project?.name ?? "Other"}</span>
+                </div>
+              )}
+              {clusters.map((c) => {
+                const on = !p.hidden.includes(c.context);
+                return (
+                  <Row
+                    key={c.context}
+                    dim={!on}
+                    indent={nested}
+                    onClick={() => p.onToggleCluster(c.context)}
+                    title={c.error ?? (on ? "Hide this cluster" : "Show this cluster")}
+                    count={on ? p.clusterCount(c.context) : undefined}
+                  >
+                    {c.logo ? <Logo src={c.logo} size={14} /> : <span className="w-[14px] text-center text-copper">⎈</span>}
+                    <span className="min-w-0 flex-1 truncate">{c.context}</span>
+                    {c.error && <span className="text-blocked">!</span>}
+                  </Row>
+                );
+              })}
+            </div>
           );
         })}
       </nav>
@@ -120,7 +162,7 @@ export default function Side(p: SideProps) {
             type="button"
             onClick={() => setAdding(true)}
             title="New group: a name and patterns like ns/* or name"
-            className="ml-auto rounded px-1 text-[13px] leading-none text-ink-muted hover:bg-active-row hover:text-ink"
+            className={PLUS}
           >
             +
           </button>

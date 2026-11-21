@@ -1,13 +1,14 @@
 // Kubernetes panel: the polled snapshot as cluster columns or one of four graphs.
 // The backend poller owns freshness; this view re-reads the in-memory snapshot.
 import { useEffect, useMemo, useState } from "react";
-import { Button, ErrorNote, type PanelProps, Select, SidebarColumn, timeAgo } from "@trame/web-api";
+import { Button, ErrorNote, getPluginSettings, getProjects, type PanelProps, type Project, Select, SidebarColumn, timeAgo } from "@trame/web-api";
 import { type Health, health, isSystem, type Snapshot, unhealthy } from "../model.ts";
 import { IS_VALUES, matches, parseQuery, type Qualifier } from "./search.ts";
 import Search from "./Search.tsx";
 import { addGroup, getState, loadPref, refreshState, savePref } from "./api.ts";
 import { buildGraph, type GraphView, HEALTH_COLOR, HEALTH_LABEL, type Ref } from "./graph-model.ts";
 import Columns from "./Columns.tsx";
+import Contexts, { type Picked } from "./Contexts.tsx";
 import Detail from "./Detail.tsx";
 import Graph, { type Layout, LAYOUTS } from "./Graph.tsx";
 import Side from "./Side.tsx";
@@ -38,6 +39,9 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
   const [onlyGroup, setOnlyGroup] = useState<string | null>(() => loadPref<string | null>("group", null));
   const [query, setQuery] = useState("");
   const [selected, setSelected] = useState<Ref | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [filed, setFiled] = useState<Record<string, string>>({}); // context → project id
+  const [picking, setPicking] = useState(false);
 
   useEffect(() => savePref("view", view), [view]);
   useEffect(() => savePref("hidden", hidden), [hidden]);
@@ -56,6 +60,18 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
       clearInterval(t);
     };
   }, []);
+
+  useEffect(() => {
+    void getProjects().then(setProjects).catch(() => {});
+    void getPluginSettings("k8s").then((s) => setFiled((s.projects ?? {}) as Record<string, string>)).catch(() => {});
+  }, []);
+  // a new context is polled right away, so its column does not wait for the next poll
+  const onPicked = (p: Picked) => {
+    setFiled(p.projects);
+    refreshState().then(setSnap).catch((e: Error) => setError(e.message));
+  };
+  const projectOf = (context: string) => projects.find((p) => p.id === filed[context]) ?? null;
+  const picker = picking && <Contexts projects={projects} onChange={onPicked} onClose={() => setPicking(false)} />;
 
   const refresh = () => {
     setBusy(true);
@@ -112,9 +128,10 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
       <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center text-[12.5px] text-ink-muted">
         <span className="text-[22px] text-copper">⎈</span>
         <span>No kube context selected yet.</span>
-        <Button variant="primary" onClick={onOpenSettings}>
-          Choose contexts
+        <Button variant="primary" onClick={() => setPicking(true)}>
+          Choose clusters
         </Button>
+        {picker}
       </div>
     );
   }
@@ -130,6 +147,8 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
         hidden={hidden}
         onToggleCluster={toggleCluster}
         clusterCount={(context) => shown.filter((w) => w.cluster === context).length}
+        projectOf={projectOf}
+        onPickClusters={() => setPicking(true)}
         groups={groups}
         group={group}
         onGroup={setOnlyGroup}
@@ -152,6 +171,9 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
   );
   const pills = !column && (
     <>
+      <button type="button" onClick={() => setPicking(true)} className={pill(false)} title="Choose the kube contexts to poll">
+        + clusters
+      </button>
       {snap.clusters.map((c) => {
         const on = !hidden.includes(c.context);
         return (
@@ -189,6 +211,7 @@ export function K8sPanel({ onOpenSettings, column }: Pick<PanelProps, "onOpenSet
   return (
     <div className="flex h-full min-h-0 flex-col">
       {side}
+      {picker}
       <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-3 py-2">
       <div className="mr-2 flex overflow-hidden rounded-md border border-chipline">
         {VIEWS.map((v) => (

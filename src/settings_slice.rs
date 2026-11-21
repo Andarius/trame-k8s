@@ -5,6 +5,7 @@ use serde_json::{Map, Value, json};
 const MAX_LOGOS: usize = 300;
 const MAX_GROUPS: usize = 50;
 const MAX_PATTERNS: usize = 100;
+const MAX_PROJECTS: usize = 300;
 const ROUTE: &str = "/api/plugins/k8s";
 
 #[derive(Clone, Debug, PartialEq)]
@@ -45,6 +46,11 @@ fn is_group(v: &str) -> bool {
     (1..=40).contains(&b.len())
         && word(b[0])
         && b[1..].iter().all(|&c| word(c) || b" .-".contains(&c))
+}
+
+// a Trame project id (a uuid)
+fn is_project_id(v: &str) -> bool {
+    (1..=64).contains(&v.len()) && v.bytes().all(|c| c.is_ascii_hexdigit() || c == b'-')
 }
 
 pub fn is_https_url(v: &str) -> bool {
@@ -113,6 +119,16 @@ pub fn sanitize(raw: &Value) -> Value {
             .take(MAX_GROUPS)
             .collect();
         out.insert("groups".into(), Value::Object(kept));
+    }
+    // context → the Trame project the sidebar files it under
+    if let Some(projects) = raw["projects"].as_object() {
+        let kept: Map<String, Value> = projects
+            .iter()
+            .filter(|(c, id)| is_context(c) && id.as_str().is_some_and(is_project_id))
+            .take(MAX_PROJECTS)
+            .map(|(c, id)| (c.clone(), id.clone()))
+            .collect();
+        out.insert("projects".into(), Value::Object(kept));
     }
     Value::Object(out)
 }
@@ -275,6 +291,10 @@ mod tests {
             (
                 json!({"groups": {"ai": ["langfuse*", "a b", "llm-*", "llm-*"], "-x": ["web"], "empty": ["?"], "data": "pg"}}),
                 json!({"groups": {"ai": ["langfuse*", "llm-*"]}}),
+            ),
+            (
+                json!({"projects": {"sw-cluster": "01a15882-5ac4-7e04-9911-7751ca749863", "-n": "01a1", "dev": "../x", "ops": 3}}),
+                json!({"projects": {"sw-cluster": "01a15882-5ac4-7e04-9911-7751ca749863"}}),
             ),
         ];
         for (raw, want) in cases {
