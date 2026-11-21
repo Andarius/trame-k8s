@@ -3,7 +3,7 @@
 export const VERSION = "0.2.1";
 export const REPO = "Andarius/trame-k8s";
 // Trame versions this release works with; compose-plugins refuses a build outside it
-export const TRAME = ">=0.24.0";
+export const TRAME = ">=0.34.4";
 
 /** Why a pushed tag cannot release this version, or null when it matches (`v` prefix optional). */
 export function tagMismatch(tag: string, version = VERSION): string | null {

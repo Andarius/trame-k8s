@@ -1,21 +1,20 @@
-// Kubernetes settings: which contexts to poll (nothing is polled until one is ticked), cadence, logos, groups.
+// Kubernetes settings: cadence, logos, groups. Contexts are picked from the panel's sidebar.
 import { type ReactNode, useEffect, useState } from "react";
-import { Button, ErrorNote, FIELD_LABEL, getPluginSettings, IconButton, savePluginSettings, TextInput } from "@trame/web-api";
+import { Button, FIELD_LABEL, getPluginSettings, IconButton, savePluginSettings, TextInput } from "@trame/web-api";
 import { SLUG_RE, type Workload } from "../model.ts";
-import { getState, listContexts, refreshState } from "./api.ts";
+import { getState } from "./api.ts";
 import { Logo } from "./Detail.tsx";
 import Matches from "./Matches.tsx";
 import PatternInput from "./PatternInput.tsx";
 
 type Slice = {
-  contexts: string[];
   pollSeconds: number;
   kubectl: string;
   autoLogos: boolean;
   logos: Record<string, string>;
   groups: Record<string, string[]>;
 };
-const DEFAULTS: Slice = { contexts: [], pollSeconds: 60, kubectl: "kubectl", autoLogos: true, logos: {}, groups: {} };
+const DEFAULTS: Slice = { pollSeconds: 60, kubectl: "kubectl", autoLogos: true, logos: {}, groups: {} };
 
 const label = `${FIELD_LABEL} mb-1.5 mt-4 block uppercase`;
 
@@ -63,19 +62,11 @@ function Rows({ rows, onChange, keyHint, valueHint, extra, workloads, complete }
 
 export function K8sSettings() {
   const [slice, setSlice] = useState<Slice | null>(null);
-  const [available, setAvailable] = useState<string[]>([]);
-  const [contextError, setContextError] = useState<string | null>(null);
   const [logoRows, setLogoRows] = useState<Row[]>([]);
   const [groupRows, setGroupRows] = useState<Row[]>([]);
   const [workloads, setWorkloads] = useState<Workload[]>([]);
   const [groupStatus, setGroupStatus] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
-
-  const loadContexts = () =>
-    listContexts().then((r) => {
-      setAvailable(r.contexts);
-      setContextError(r.error ?? null);
-    }).catch((e: Error) => setContextError(e.message));
 
   useEffect(() => {
     void getPluginSettings("k8s").then((raw) => {
@@ -84,7 +75,6 @@ export function K8sSettings() {
       setLogoRows(rowsOf(s.logos));
       setGroupRows(rowsOf(s.groups));
     });
-    void loadContexts();
     void getState().then((snap) => setWorkloads(snap.clusters.flatMap((c) => c.workloads))).catch(() => {});
   }, []);
 
@@ -94,10 +84,6 @@ export function K8sSettings() {
     const next = { ...DEFAULTS, ...(await savePluginSettings("k8s", patch)) } as Slice;
     setSlice(next);
     return next;
-  };
-  const toggle = (ctx: string) => {
-    const contexts = slice.contexts.includes(ctx) ? slice.contexts.filter((c) => c !== ctx) : [...slice.contexts, ctx];
-    void save({ contexts }).then(() => refreshState().catch(() => null));
   };
   const saveLogos = async () => {
     const wanted: Record<string, string> = Object.fromEntries(logoRows.map((r) => [r.key.trim(), r.value.trim()]).filter(([k, v]) => k && v));
@@ -116,29 +102,8 @@ export function K8sSettings() {
     setGroupRows(rowsOf(next.groups));
     setGroupStatus(dropped.length ? `Ignored: ${dropped.join(", ")}` : "Saved");
   };
-  // contexts saved earlier but gone from the kubeconfig stay listed, so they can be unticked
-  const shown = [...new Set([...available, ...slice.contexts])];
-
   return (
     <div className="text-[12px] text-ink-soft">
-      <div className={label}>Contexts to poll</div>
-      <p className="mb-2 text-[11.5px] text-ink-muted">
-        Read with <code>kubectl get</code> using your kubeconfig. Nothing is polled until a context is ticked.
-      </p>
-      {contextError && <ErrorNote className="mb-2 break-words">{contextError}</ErrorNote>}
-      <div className="grid gap-1">
-        {shown.map((ctx) => (
-          <label key={ctx} className="flex cursor-pointer items-center gap-2">
-            <input type="checkbox" checked={slice.contexts.includes(ctx)} onChange={() => toggle(ctx)} className="accent-[var(--color-copper)]" />
-            <span className="font-mono text-[11.5px]">{ctx}</span>
-            {!available.includes(ctx) && <span className="text-[10.5px] text-ink-muted">not in kubeconfig</span>}
-          </label>
-        ))}
-      </div>
-      <Button size="sm" onClick={() => void loadContexts()} className="mt-2">
-        ↻ Reload contexts
-      </Button>
-
       <div className={label}>Polling</div>
       <div className="flex flex-wrap items-center gap-2">
         <span>Every</span>
